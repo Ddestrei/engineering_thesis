@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	<PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+	<ItemGroup>
+		<Reference Include="Microsoft.SqlServer.XEvent.Linq">
+			<HintPath>lib\Microsoft.SqlServer.XEvent.Linq.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SqlServer.XE.Core">
+			<HintPath>lib\Microsoft.SqlServer.XE.Core.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+</Project>

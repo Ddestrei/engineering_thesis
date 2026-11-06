@@ -1,0 +1,25 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Strona-1" id="qWCDkj6695qy7J3EUzqu">
+    <mxGraphModel dx="1369" dy="757" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="U-b8bGa8B8YP4nsR3fxi-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="CEO" vertex="1">
+          <mxGeometry height="60" width="120" x="310" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="U-b8bGa8B8YP4nsR3fxi-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="SALES MANAGER" vertex="1">
+          <mxGeometry height="60" width="120" x="90" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="U-b8bGa8B8YP4nsR3fxi-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="CFO" vertex="1">
+          <mxGeometry height="60" width="120" x="440" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="U-b8bGa8B8YP4nsR3fxi-4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="SALES" vertex="1">
+          <mxGeometry height="60" width="120" x="200" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="U-b8bGa8B8YP4nsR3fxi-5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="MARKETING" vertex="1">
+          <mxGeometry height="60" width="120" x="640" y="240" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

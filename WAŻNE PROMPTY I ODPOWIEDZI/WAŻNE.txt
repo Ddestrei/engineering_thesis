@@ -1,0 +1,90 @@
+Jako architekt oprogramowania muszę przyznać, że Twój recenzent trafił w sam punkt. Wybór środowiska uruchomieniowego dla algorytmów takich jak Local Outlier Factor (LOF), One-Class SVM (OCSVM) i Isolation Forest (IF) to kluczowa decyzja architektoniczna, która zadecyduje o tym, czy skupisz się na badaniu anomalii (cel pracy), czy na walce z przestarzałymi zależnościami i brakiem dokumentacji.
+
+Oto wyczerpująca analiza Twojego problemu z perspektywy nowoczesnego stosu .NET 9.
+
+1. Natywne wsparcie w .NET 9 (ML.NET i inne biblioteki)
+Krótka odpowiedź: W pełni natywna implementacja (trening i inferencja) LOF, OCSVM i IF w nowoczesnym C# jest obecnie bardzo problematyczna.
+
+ML.NET: Mimo że to potężne narzędzie, jego moduł do detekcji anomalii (AnomalyDetection) skupia się na innych algorytmach. Oferuje głównie analizę szeregów czasowych (IID Spikes, Change Points, SrCnn) oraz Randomized PCA. ML.NET nie posiada wbudowanych implementacji Isolation Forest ani LOF. OCSVM można teoretycznie uruchomić poprzez wrappery na bibliotekę C++ LibSVM (która jest dostępna w starszych pakietach), ale praca z tym w czystym .NET 9 bywa toporna.
+
+Accord.NET: Jest to framework martwy. Ostatnie duże aktualizacje miały miejsce w okolicach 2017/2018 roku, był pisany z myślą o starym .NET Framework. Wrzucanie go do nowoczesnej aplikacji opartej na .NET 9 skończy się piekłem zależności (Dependency Hell), problemami z kompatybilnością między platformami i brakiem wsparcia. Kategorycznie odradzam.
+
+Math.NET Numerics / inne biblioteki: Math.NET to doskonała biblioteka do algebry i statystyki, ale to nie jest biblioteka do uczenia maszynowego. Nie znajdziesz tam gotowych algorytmów IF czy LOF.
+
+Wniosek: Próba napisania tych modeli od zera w C# to projekt na osobną pracę dyplomową, a szukanie przestarzałych paczek NuGet to ogromne ryzyko techniczne.
+
+2. Metody statystyczne w C# (Robust Z-Score)
+Tutaj .NET 9 błyszczy, a implementacja będzie bardzo wydajna.
+
+.NET 9 (System.Linq / System.Numerics): Standardowa biblioteka BCL nie posiada wbudowanej funkcji obliczania Mediany ani odchylenia MAD (posiada tylko Average, Sum itp.). Możesz to napisać samodzielnie przy użyciu nowoczesnych mechanizmów (np. sortowanie danych w Span<T>, co w .NET 9 jest niezwykle szybkie i bezalokacyjne), ale po co wynajdować koło na nowo?
+
+Rekomendacja (Math.NET Numerics): To najlepszy i najbardziej optymalny wybór. Jest w pełni kompatybilny z nowoczesnym .NET.
+
+Mediana: Statistics.Median(data)
+
+MAD / IQR: Obliczenie MAD sprowadza się do jednej linijki: var median = Statistics.Median(data); var mad = Statistics.Median(data.Select(x => Math.Abs(x - median)));
+
+Możesz przetwarzać okna czasowe wielowątkowo wykorzystując Parallel.ForEach lub nowsze mechanizmy asynchroniczne z .NET 9, a Math.NET bez problemu sobie z tym poradzi.
+
+3. Alternatywne architektury (Rozwiązanie problemu integracyjnego)
+Przeanalizujmy trzy opcje z perspektywy architektury systemu:
+
+Opcja A: Pełna natywność (Tylko C#)
+Zalety: Jeden proces, najprostsze wdrożenie, brak opóźnień komunikacyjnych (IPC).
+
+Wady: Z powodu braku bibliotek ML dla IF i LOF, zmusza Cię do własnoręcznej implementacji tych algorytmów lub rezygnacji z nich na rzecz np. Randomized PCA w ML.NET.
+
+Werdykt: Nieakceptowalne, jeśli musisz zrealizować założenia eksperymentu narzucone przez temat/promotora.
+
+Opcja B: ONNX (Microsoft.ML.OnnxRuntime)
+Zalety: Bardzo nowoczesne podejście. Uczysz model w Pythonie (np. scikit-learn), eksportujesz używając skl2onnx, a w WPF ładujesz lekki plik .onnx. Inferencja w .NET 9 z OnnxRuntime jest niesamowicie szybka.
+
+Wady (w tym "Dynamiczne dotrenowywanie"): ONNX służy wyłącznie do inferencji (przewidywania). Nie da się "dotrenować" modelu ONNX natywnie w C#. Jeśli system zakłada, że model adaptuje się do nowych logów behawioralnych na żywo, Opcja B upada. Musiałbyś wysyłać dane do skryptu Pythona, tam trenować nowy model, zapisywać do dysku jako .onnx, wysyłać sygnał do WPF, zwalniać stary model i ładować nowy. To toporne i podatne na błędy (file locks itp.).
+
+Opcja C: Mikroserwis Python (np. FastAPI / gRPC) + WPF (Frontend & Orchestrator)
+Zalety:
+
+Dostęp do Scikit-Learn: Posiada wybitne, zoptymalizowane, standardowe w branży implementacje LOF, OCSVM i Isolation Forest.
+
+Ewaluacja: Python pozwala w 3 linijkach kodu wygenerować pełen raport metryk (Precision, Recall, PR-AUC, F1, ROC) i zapisać go do JSON/CSV, które WPF po prostu wyświetli na wykresach (np. w LiveCharts2 lub OxyPlot).
+
+Stan (Stateful): Serwis FastAPI może trzymać modele w pamięci (np. obiekty joblib) i udostępniać endpoint /retrain do dynamicznego aktualizowania wag w tle na podstawie nowych okien czasowych, nie blokując wątku UI w WPF.
+
+Wady: Skomplikowanie wdrożenia (potrzebne środowisko Pythona), narzut na serializację danych i komunikację sieciową (localhost).
+
+4. Moja rekomendacja jako Architekta
+Biorąc pod uwagę fakt, że to praca inżynierska, której celem jest porównanie skuteczności metod, a nie pisanie frameworka ML od podstaw, polecam Ci zastosowanie Architektury Hybrydowej (Opartej na Opcji C dla modeli zaawansowanych).
+
+Proponowana Architektura:
+
+Aplikacja WPF (.NET 9):
+
+Zarządza pobieraniem zdarzeń z SQL Server (Extended Events).
+
+Wykonuje ekstrakcję cech (Feature Engineering) i okienkowanie czasowe (agregacje, wektory).
+
+Natywnie wykonuje: Baseline regułowy oraz Metody Statystyczne (Z-score + Math.NET). To udowodni Twoje umiejętności inżynierskie w wydajnym przetwarzaniu danych w nowoczesnym C#.
+
+Prezentuje wyniki (Panel Analityczny).
+
+Serwis Analityczny (Python 3.11+ / FastAPI):
+
+Działa w tle na tym samym hoście (localhost).
+
+Komunikuje się z WPF przez REST API (lub gRPC, jeśli chcesz zaszaleć, ale do pracy inż. szybki REST + JSON będzie w 100% wystarczający i tańszy czasowo w implementacji).
+
+Wystawia endpointy: /predict (przewidywanie anomalii) oraz /retrain (aktualizacja modelu za pomocą okien przesuwnych/nowych danych).
+
+Pod spodem używa scikit-learn (implementacje sklearn.ensemble.IsolationForest, sklearn.svm.OneClassSVM, sklearn.neighbors.LocalOutlierFactor). Pamiętaj, że dla LOF w trybie novelty detection musisz zainicjować model z flagą novelty=True.
+
+Dlaczego to jest najlepsza ścieżka?
+
+Brak długu technologicznego: Unikasz przestarzałego Accord.NET. Piszesz w dwóch nowoczesnych, wspieranych ekosystemach (.NET 9 i aktualny Python/Scikit-learn).
+
+Zgodność z rynkiem: Integracja aplikacji C# z usługami ML w Pythonie to dziś rynkowy standard (tzw. Polyglot Architecture). Pokażesz w pracy inżynierskiej, że rozumiesz, do czego służy dane narzędzie i potrafisz integrować heterogeniczne systemy.
+
+Niezawodność przy ewaluacji: Badanie metryk PR-AUC jest kluczowe w detekcji anomalii (gdzie klasy są ekstremalnie niezbalansowane). Scikit-learn wygeneruje je bezbłędnie. Zrobienie tego samemu w C# grozi błędami matematycznymi, które zrujnują wnioski w pracy dyplomowej.
+
+Wydajność: Obliczenia statystyczne i zasady robisz w C# w ułamku milisekund. Złożone modele delegujesz do Pythona, którego paczki ML są pod spodem zoptymalizowane do granic możliwości w języku C.
+
+Rada na koniec: Opisz tę decyzję architektoniczną w rozdziale wprowadzającym do implementacji. Rozwiewając wprost wątpliwości recenzenta i pokazując zestawienie (C# vs ONNX vs Microservice) udowodnisz dojrzałość inżynierską – to materiał na bardzo dużego plusa na obronie.

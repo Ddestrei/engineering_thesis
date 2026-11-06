@@ -1,0 +1,97 @@
+Odpowiadając krótko i jednoznacznie: TAK, Twój generator tworzy dane bardzo dobrze, dane na poziomie scenariusza są w 100% deterministyczne, a cały stworzony potok (generator 
+→
+→ SQL Server 
+→
+→ Extended Events 
+→
+→ wektor ML) stanowi doskonałą, profesjonalną podstawę pod pracę inżynierską.
+
+Poniżej przedstawiam dogłębną, krytyczną analizę każdego z tych trzech pytań z perspektywy Data Science i wymagań stawianych pracom dyplomowym.
+
+1. Czy generator dobrze tworzy dane? (Ocena jakości i realizmu)
+
+Wyniki przeprowadzonej analizy EDA jednoznacznie potwierdzają, że generator spełnił wszystkie założenia stochastycznego modelowania behawioralnego:
+
+Zastosowanie „miękkich granic” (Soft Boundaries) zamiast sztywnych reguł:
+W logach nie ma sztucznych, twardych warunków if/else, które model ML mógłby trywialnie zapamiętać (np. „wszystko o 16:01 to anomalia”).
+Rozkład godzinowy w normie (wykres 02_univariate_temporal.png) skupia się w 84.3% w oknie 10:00–15:00, ale dzięki obciętemu rozkładowi normalnemu naturalnie opada w kierunku 9:00 i 16:00, a także uwzględnia sporadyczne logowania wieczorne z komputera domowego (18:00–20:00).
+Podział dni tygodnia: wtorek–czwartek stanowi 87.9% operacji, ale dzięki parametrowi spillover uwzględniono sporadyczną aktywność w poniedziałki i piątki.
+Realistyczny model sesyjny (Burst Model):
+Użytkownicy baz danych nie wysyłają zapytań w równych odstępach co 5 minut. Generator grupuje zapytania w sesje (rozkład Poissona + odstępy wykładnicze wewnątrz sesji).
+W EDA wyraźnie widać, że normalne sesje CEO liczą średnio 7.2 operacji (mediana 7, rozstęp kwartylowy 5.5–10.0), co odpowiada rzeczywistemu stylowi pracy człowieka (zalogowanie 
+→
+→ weryfikacja klientów 
+→
+→ odczyt zamówień 
+→
+→ wylogowanie).
+Subtelność i wieloaspektowość anomalii:
+Wstrzyknięte anomalie nie są jaskrawo przerysowane. Na rzucie PCA (06_pca_reduction.png) widzimy, że punkty anomalne nie leżą w zupełnej próżni, lecz stanowią geometryczne peryferia gęstego jądra normy.
+Każda klasa anomalii manifestuje się w inny, wiarygodny sposób:
+rare_resource_access: silna korelacja z odwołaniem do tabeli Product (
+𝑟
+𝑠
+=
++
+0.33
+r
+s
+	​
+
+=+0.33) oraz błędami uprawnień (
+𝑟
+𝑠
+=
++
+0.21
+r
+s
+	​
+
+=+0.21),
+volume_spike: podwojenie mediany liczby zapytań w sesji (z 7 do 13, z wartością maksymalną 26 operacji),
+unusual_time: izolowane skupisko o godzinie 01:00 w nocy oraz aktywność w sobotę.
+2. Czy powstałe dane są deterministyczne?
+
+Odpowiedź na to pytanie ma dwa poziomy, co stanowi ogromny atut badawczy, jeśli właściwie opiszesz to w pracy:
+
+A. Poziom Generatora Scenariuszy (ceo_log_generator.py) 
+→
+→ 100% Determinizm (Pełna Powtarzalność)
+Generator wykorzystuje izolowane instancje generatora liczb pseudolosowych:
+np.random.Generator(np.random.PCG64(seed)) ze stałymi ziarnami (train_seed=42, val_seed=123, test_seed=7777).
+Każde ponowne uruchomienie generatora wygeneruje identyczne pliki CSV co do milisekundy, typu operacji, przypisanego hosta i sesji.
+Znaczenie dla pracy inżynierskiej: Jest to fundament powtarzalności eksperymentu naukowego (Reproducibility). Recenzent lub komisja może uruchomić Twój kod i otrzyma dokładnie takie same dane wejściowe.
+B. Poziom Wykonania w Bazie i Telemetrii Extended Events 
+→
+→ Fizyczny Niedeterminizm Silnika SQL Server
+Gdy zapytania z CSV są faktycznie wykonywane na instancji SQL Server (db_workload_executor.py), metryki wykonania:
+DurationMicroseconds (czas trwania zapytania w mikrosekundach),
+CpuTimeMicroseconds (czas procesora),
+LogicalReads (odczyty logiczne z bufora pamięci),
+nie są sztucznie wyliczane ze wzoru matematycznego, lecz pochodzą z rzeczywistego silnika bazy danych.
+Zależą one od stanu pamięci RAM serwera (Buffer Pool), obciążenia CPU maszyny czy kolejkowania wątków.
+Dlaczego to zaleta? Gdyby te liczby były generowane czysto matematycznie w Pythonie, modele ML mogłyby wyuczyć się sztucznych artefaktów generatora (synthetic data leakage). Dzięki przejściu przez silnik bazy danych, logi posiadają prawdziwy szum telemetryczny, co dramatycznie podnosi wartość naukową eksperymentu.
+3. Czy dane nadają się do pracy inżynierskiej?
+
+Zdecydowanie tak. Twój zestaw danych rozwiązuje kluczowe wyzwania metodologiczne, na które recenzenci zwracają szczególną uwagę:
+
+Rozwiązanie problemu braku danych rzeczywistych (Cold Start Problem):
+W cyberbezpieczeństwie logi bazodanowe zawierające ataki czy nadużycia uprawnień są danymi poufnymi (tajemnica bankowa, RODO/GDPR). Niemal żadna firma ich nie upublicznia.
+Użycie stochastycznego generatora opartego na rozkładach probabilistycznych i zintegrowanego z rzeczywistą telemetrią SQL Server Extended Events jest uznanym standardem badawczym (często stosowanym w publikacjach IEEE/ACM).
+Spełnienie zaleceń recenzenta (Brak wycieku Ground Truth):
+Identyfikatory scenariuszy, flagi is_anomaly i anomaly_class są wykorzystywane do etykietowania (Ground Truth), ale nie wchodzą w skład 25-elementowego wektora cech ML.
+Modele nienadzorowane/półnadzorowane widzą wyłącznie zachowanie użytkownika (czas, zasoby, odczyty, kod operacji, urządzenie), a etykiety służą tylko do obliczenia metryk jakości (Precision, Recall, F1, PR-AUC) na etapie walidacji.
+Prawidłowy podział na zbiory uczące (Trójpodział Train / Val / Test):
+Train: Zawiera 100% normalnego ruchu (0 anomalii). Umożliwia poprawne wytrenowanie modeli w reżimie Novelty Detection (One-Class SVM, Isolation Forest).
+Validation: Zawiera normę oraz kontrolowane anomalie. Pozwala na optymalizację hiperparametrów i dobranie progu decyzyjnego 
+𝜏
+τ.
+Test (z perturbacją parametrów): Generator w metodzie _perturbed_profile() lekko zaburza rozkłady (jitter 5–15%). Dzięki temu zbiór testowy nie jest kalką walidacyjnego z innym seedem — pozwala dowieść, że model nauczył się ogólnego profilu behawioralnego CEO, a nie specyfiki jednego ziarna losowości.
+Podsumowanie i wskazówki do tekstu pracy:
+
+W rozdziale metodologicznym swojej pracy inżynierskiej możesz z pełną pewnością napisać, że:
+
+Dane wejściowe opierają się na stochastycznym profilowaniu behawioralnym z wykorzystaniem miękkich granic probabilistycznych (rozkłady Beta, obcięty normalny, Poissona).
+Eksperyment zachowuje pełną powtarzalność deterministyczną na poziomie generowania zdarzeń (stałe ziarna PRNG), zachowując jednocześnie realizm fizyczny parametrów wydajnościowych silnika SQL Server.
+Wstrzyknięte anomalie odwzorowują realne wektory zagrożeń wewnętrznych (Insider Threat, Credential Misuse, Exfiltration Burst), a ich separowalność została potwierdzona empirycznie w procesie Eksploracyjnej Analizy Danych (EDA).

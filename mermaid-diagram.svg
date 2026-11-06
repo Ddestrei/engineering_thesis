@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 410.93999999999994 1017.7999999999998" width="410.93999999999994" height="1017.7999999999998" style="--bg:#18181B;--fg:#F4F4F5;--line:#71717A;--muted:#A1A1AA;--surface:#27272A;--border:#3F3F46;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<polyline class="edge" data-from="A" data-to="B" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Zapis do CSV" points="205.46999999999997,93.80000000000001 205.46999999999997,210.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="B" data-to="C" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="205.46999999999997,263.90000000000003 205.46999999999997,311.90000000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="C" data-to="D" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Wykonanie zapytań T-SQL" points="205.46999999999997,365.70000000000005 205.46999999999997,482.00000000000006" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="D" data-to="E" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Asynchroniczny zapis logów" points="205.46999999999997,535.8000000000001 205.46999999999997,652.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E" data-to="F" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="205.46999999999997,705.9 205.46999999999997,753.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="F" data-to="G" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Eksport wektorów cech" points="205.46999999999997,807.6999999999999 205.46999999999997,923.9999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="A" data-to="B" data-label="Zapis do CSV">
+  <rect x="164.46999999999997" y="136.8" width="81.80199999999999" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="205.37099999999998" y="151.95000000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Zapis do CSV</text>
+</g>
+<g class="edge-label" data-from="C" data-to="D" data-label="Wykonanie zapytań T-SQL">
+  <rect x="133.46999999999997" y="408.70000000000005" width="143.578" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="205.25899999999996" y="423.85" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Wykonanie zapytań T-SQL</text>
+</g>
+<g class="edge-label" data-from="D" data-to="E" data-label="Asynchroniczny zapis logów">
+  <rect x="127.96999999999996" y="578.8000000000001" width="154.27" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="205.10499999999996" y="593.95" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Asynchroniczny zapis logów</text>
+</g>
+<g class="edge-label" data-from="F" data-to="G" data-label="Eksport wektorów cech">
+  <rect x="140.96999999999997" y="850.6999999999999" width="128.13400000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="205.03699999999998" y="865.8499999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Eksport wektorów cech</text>
+</g>
+<g class="node" data-id="A" data-label="1. ceo_log_generator.py
+(Generowanie profilu CEO + Urządzenia + Loginy)" data-shape="rectangle">
+  <rect x="40" y="40" width="330.93999999999994" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="205.46999999999997" y="66.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="205.46999999999997" dy="-3.9000000000000012">1. ceo_log_generator.py</tspan><tspan x="205.46999999999997" dy="16.900000000000002">(Generowanie profilu CEO + Urządzenia + Loginy)</tspan></text>
+</g>
+<g class="node" data-id="B" data-label="Pliki CSV
+(ceo_train, val, test)" data-shape="rectangle">
+  <rect x="128.17899999999997" y="210.1" width="154.58200000000002" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="205.46999999999997" y="237" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="205.46999999999997" dy="-3.9000000000000012">Pliki CSV</tspan><tspan x="205.46999999999997" dy="16.900000000000002">(ceo_train, val, test)</tspan></text>
+</g>
+<g class="node" data-id="C" data-label="2. db_workload_executor.py
+(Podszywanie pod Host/IP w nagłówkach TDS)" data-shape="rectangle">
+  <rect x="47.41" y="311.90000000000003" width="316.11999999999995" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="205.46999999999997" y="338.8" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="205.46999999999997" dy="-3.9000000000000012">2. db_workload_executor.py</tspan><tspan x="205.46999999999997" dy="16.900000000000002">(Podszywanie pod Host/IP w nagłówkach TDS)</tspan></text>
+</g>
+<g class="node" data-id="D" data-label="SQL Server (AdventureWorksLT2025)
++ Extended Events (.xel)" data-shape="rectangle">
+  <rect x="69.2695" y="482.00000000000006" width="272.40099999999995" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="205.46999999999997" y="508.90000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="205.46999999999997" dy="-3.9000000000000012">SQL Server (AdventureWorksLT2025)</tspan><tspan x="205.46999999999997" dy="16.900000000000002">+ Extended Events (.xel)</tspan></text>
+</g>
+<g class="node" data-id="E" data-label="C:\XELogs\*.xel
+(Rzeczywiste metryki CPU, Reads, Status)" data-shape="rectangle">
+  <rect x="62.971000000000004" y="652.1" width="284.99799999999993" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="205.46999999999997" y="679" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="205.46999999999997" dy="-3.9000000000000012">C:\XELogs\*.xel</tspan><tspan x="205.46999999999997" dy="16.900000000000002">(Rzeczywiste metryki CPU, Reads, Status)</tspan></text>
+</g>
+<g class="node" data-id="F" data-label="3. LOGGER w .NET 9
+(XeLogReader + MLFeatureExporter)" data-shape="rectangle">
+  <rect x="72.23349999999999" y="753.9" width="266.47299999999996" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="205.46999999999997" y="780.8" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="205.46999999999997" dy="-3.9000000000000012">3. LOGGER w .NET 9</tspan><tspan x="205.46999999999997" dy="16.900000000000002">(XeLogReader + MLFeatureExporter)</tspan></text>
+</g>
+<g class="node" data-id="G" data-label="Pliki JSON w LOGI/
+(Ground Truth + Feature Vectors dla ML)" data-shape="rectangle">
+  <rect x="65.56450000000001" y="923.9999999999999" width="279.8109999999999" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="205.46999999999997" y="950.8999999999999" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="205.46999999999997" dy="-3.9000000000000012">Pliki JSON w LOGI/</tspan><tspan x="205.46999999999997" dy="16.900000000000002">(Ground Truth + Feature Vectors dla ML)</tspan></text>
+</g>
+</svg>

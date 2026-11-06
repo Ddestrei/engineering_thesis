@@ -1,0 +1,53 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v9.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v9.0": {
+      "LOGGER/1.0.0": {
+        "dependencies": {
+          "Microsoft.SqlServer.XE.Core": "17.100.0.0",
+          "Microsoft.SqlServer.XEvent.Linq": "17.100.0.0"
+        },
+        "runtime": {
+          "LOGGER.dll": {}
+        }
+      },
+      "Microsoft.SqlServer.XE.Core/17.100.0.0": {
+        "runtime": {
+          "Microsoft.SqlServer.XE.Core.dll": {
+            "assemblyVersion": "17.100.0.0",
+            "fileVersion": "2025.170.855.0"
+          }
+        }
+      },
+      "Microsoft.SqlServer.XEvent.Linq/17.100.0.0": {
+        "runtime": {
+          "Microsoft.SqlServer.XEvent.Linq.dll": {
+            "assemblyVersion": "17.100.0.0",
+            "fileVersion": "2025.170.855.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "LOGGER/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.SqlServer.XE.Core/17.100.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.SqlServer.XEvent.Linq/17.100.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

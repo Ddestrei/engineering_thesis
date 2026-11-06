@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System wykrywania anomalii w operacjach na bazie danych z panelem analitycznym w WPF</title>
+    <!-- Reveal.js CDN CSS (Wersja 5.1.0 dodająca natywny tryb przewijania) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/dracula.min.css" id="theme">
+    <!-- Ciemny motyw IT/Cybersecurity (100% Statyczny, Bez Animacji) -->
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #161e2e;
+            --card-border: #2a364f;
+            --accent-cyan: #38bdf8;
+            --accent-green: #34d399;
+            --accent-purple: #c084fc;
+            --accent-warning: #fbbf24;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        .reveal-viewport {
+            background: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        .reveal h1, .reveal h2, .reveal h3 {
+            color: #ffffff;
+            text-transform: none;
+            font-weight: 450;
+            letter-spacing: -0.02em;
+        }
+
+        /* Zmniejszone nagłówki H1 i H2 */
+        .reveal h1 {
+            font-size: 1.4em;
+            color: var(--accent-cyan);
+            margin-bottom: 0.3em;
+        }
+
+        .reveal h2 {
+            font-size: 1.15em;
+            color: var(--accent-cyan);
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+            text-align: left;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 14px;
+            text-align: left;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            font-weight: 600;
+            color: var(--accent-cyan);
+            margin-bottom: 8px;
+            font-size: 1.05em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .reveal ul {
+            font-size: 0.82em;
+            line-height: 1.5;
+            color: var(--text-main);
+            margin: 0;
+            padding-left: 1.2em;
+        }
+
+        .reveal ul li {
+            margin-bottom: 8px;
+        }
+
+        .reveal ul li strong {
+            color: var(--accent-green);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            font-size: 0.75em;
+            font-weight: 600;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid var(--accent-cyan);
+            margin-bottom: 10px;
+        }
+
+        .badge-warning {
+            background: rgba(251, 191, 36, 0.15);
+            color: var(--accent-warning);
+            border-color: var(--accent-warning);
+        }
+
+        .badge-purple {
+            background: rgba(192, 132, 252, 0.15);
+            color: var(--accent-purple);
+            border-color: var(--accent-purple);
+        }
+
+        /* Bezwzględne wyłączenie animacji CSS */
+        .reveal .slides section,
+        .reveal .slides section * {
+            transition: none !important;
+            animation: none !important;
+            transform: none !important;
+        }
+        
+        /* Wymuszenie odstępów w trybie scroll oraz proporcji 16:9 */
+        .reveal.scroll-page .reveal-viewport {
+            overflow-y: auto !important;
+        }
+
+        .reveal.scroll-page .slides {
+            width: 100% !important;
+            max-width: 1280px; /* Maksymalna szerokość dla czytelności na dużych ekranach */
+            margin: 0 auto !important;
+        }
+
+        .reveal.scroll-page .slides section {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            aspect-ratio: 16 / 9; /* Wymuszenie proporcji 16:9 */
+            min-height: unset !important; /* Wyłącza domyślne 100vh ze skryptu reveal */
+            margin-bottom: 40px; /* Odstęp między slajdami podczas scrollowania */
+            padding: 20px;
+            box-sizing: border-box;
+            background-color: var(--bg-color);
+        }
+
+        /* Utrzymanie zawartości slajdu pośrodku */
+        .reveal.scroll-page .slides section > * {
+            width: 100%;
+        }
+
+        /* Diagram Elements */
+        .flow-arrow {
+            font-size: 2em; 
+            color: var(--text-muted); 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- SLAJD 1: Tytułowy -->
+            <section>
+                <div class="badge">Praca Inżynierska</div>
+                <h1>System wykrywania anomalii w operacjach na bazie danych z panelem analitycznym w WPF</h1>
+                
+                <div style="display: flex; flex-direction: column; gap: 12px; max-width: 820px; margin: 20px auto 0 auto;">
+                    <div class="card">
+                        <div class="card-header">Autor Projektu</div>
+                        <p style="font-size: 0.9em; margin: 0; color: #fff;">Patryk Grys (251147)</p>
+                        <p style="font-size: 0.78em; margin: 4px 0 0 0; color: var(--text-muted);">Specjalność: Bazy Danych</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">Promotor Pracy</div>
+                        <p style="font-size: 0.9em; margin: 0; color: #fff;">dr inż. Łukasz Wąs</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">Tematyka</div>
+                        <p style="font-size: 0.82em; margin: 0; color: var(--text-main);">
+                            Detekcja anomalii behawioralnych (SQL Server Extended Events) przy użyciu stochastycznego generatora ruchu.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SLAJD 2: Problem i Cel Badawczy -->
+            <section>
+                <h2>Problem i Cel Badawczy</h2>
+                <div class="card">
+                    <div class="card-header">🎯 Cel Badawczy Pracy</div>
+                    <p style="font-size: 0.75em; text-align: justify; line-height: 1.5; margin: 0;">
+                        Celem badawczym pracy jest porównanie skuteczności metod regułowych, statystycznych i metod uczenia maszynowego w wykrywaniu wybranych anomalii behawioralnych w operacjach wykonywanych na bazie danych SQL Server, przy wykorzystaniu kontrolowanego, etykietowanego środowiska symulacyjnego. Ocenie podlegać będzie jakość detekcji, liczba fałszywych alarmów, zdolność do generalizacji na niezależny zbiór testowy oraz przydatność uzyskanego wyniku do priorytetyzacji incydentów w aplikacji WPF.
+                    </p>
+                </div>
+            </section>
+
+            <!-- SLAJD 3: Pytania i Hipotezy Badawcze -->
+            <section>
+                <h2>Pytania i Hipotezy Badawcze</h2>
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <div class="card">
+                        <div class="card-header">💡 Główne Założenia (Hipotezy)</div>
+                        <p style="font-size: 0.82em; text-align: justify; line-height: 1.6; margin: 0;">
+                            Hipotezy badawcze skupiają się na udowodnieniu przewagi profilowania behawioralnego poszczególnych ról nad modelami globalnymi. Dodatkowo zakładają, że synergia różnych cech (czasowych, wolumenowych, kontekstowych) oraz zastosowanie zaawansowanych algorytmów ML pozwoli skuteczniej identyfikować wielowymiarowe anomalie, przy jednoczesnej minimalizacji fałszywych alarmów (FPR) względem tradycyjnych reguł. Ponadto, zakłada się, że wspólny <i>risk score</i> poprawi priorytetyzację incydentów.
+                        </p>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">❓ Obszary Badawcze (Pytania)</div>
+                        <p style="font-size: 0.82em; text-align: justify; line-height: 1.6; margin: 0;">
+                            Pytania badawcze weryfikują możliwości budowy stabilnych, spersonalizowanych profili aktywności użytkowników. Obejmują one dociekanie, które zbiory cech mają największy wpływ na detekcję określonych klas anomalii, oraz w jakich scenariuszach modele ML dają rzeczywistą przewagę nad podejściem statystycznym i regułowym. Projekt poszukuje również mierzalnych wskaźników jakości klasyfikacji (takich jak PR-AUC, MCC) na całkowicie odseparowanym zbiorze testowym.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SLAJD 4: Architektura Systemu (Schemat) -->
+            <section>
+                <h2>Architektura Systemu i Przepływ Danych</h2>
+                <div style="display: flex; justify-content: space-between; align-items: stretch; margin-top: 40px; gap: 10px;">
+                    <!-- Krok 1 -->
+                    <div class="card" style="width: 30%; text-align: center; border-color: var(--accent-cyan);">
+                        <span class="badge">1. Warstwa Źródłowa</span>
+                        <h3 style="margin: 15px 0 10px 0; font-size: 1.2em; color: var(--accent-cyan);">SQL Server</h3>
+                        <p style="font-size: 0.75em; line-height: 1.4;">
+                            Baza AdventureWorksLT<br>
+                            <strong>Extended Events</strong><br>
+                            (Rejestracja logów, zapytań i kontekstu w czasie rzeczywistym)
+                        </p>
+                    </div>
+                    
+                    <!-- Strzałka -->
+                    <div class="flow-arrow" style="color: var(--accent-cyan);">➔</div>
+                    
+                    <!-- Krok 2 -->
+                    <div class="card" style="width: 30%; text-align: center; border-color: var(--accent-purple);">
+                        <span class="badge badge-purple">2. Warstwa Analityczna</span>
+                        <h3 style="margin: 15px 0 10px 0; font-size: 1.2em; color: var(--accent-purple);">Python / ML</h3>
+                        <p style="font-size: 0.75em; line-height: 1.4;">
+                            Agregacja okien czasowych<br>
+                            Inference Modeli ML<br>
+                            (iForest, LOF, OCSVM, Robust)
+                        </p>
+                    </div>
+
+                    <!-- Strzałka -->
+                    <div class="flow-arrow" style="color: var(--accent-purple);">➔</div>
+
+                    <!-- Krok 3 -->
+                    <div class="card" style="width: 30%; text-align: center; border-color: var(--accent-warning);">
+                        <span class="badge badge-warning">3. Warstwa Prezentacji</span>
+                        <h3 style="margin: 15px 0 10px 0; font-size: 1.2em; color: var(--accent-warning);">Aplikacja WPF</h3>
+                        <p style="font-size: 0.75em; line-height: 1.4;">
+                            Środowisko .NET<br>
+                            Panel dyspozytorski SOC<br>
+                            Priorytetyzacja (Risk Score)
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SLAJD 5: Badane Klasy Anomalii -->
+            <section>
+                <h2>Badane Klasy Anomalii Behawioralnych</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-header">🕒 1. Nietypowa pora aktywności</div>
+                        <ul>
+                            <li><strong>Opis:</strong> Wykonywanie operacji poza standardowym oknem czasowym roli (np. praca w nocy 01:00–05:00 lub w weekend).</li>
+                            <li><strong>Wektor cech:</strong> Godzina zdarzenia, dzień tygodnia, typ urządzenia.</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">📈 2. Gwałtowny wzrost operacji</div>
+                        <ul>
+                            <li><strong>Opis:</strong> Skokowy, niezapowiedziany wzrost liczby zapytań w krótkim oknie czasowym (burst).</li>
+                            <li><strong>Wektor cech:</strong> Liczba operacji / okno agregacji, odchylenie od baseline wolumenu.</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">⚖️ 3. Nietypowa proporcja operacji</div>
+                        <ul>
+                            <li><strong>Opis:</strong> Zmiana stosunku instrukcji (np. 90% INSERT/DELETE zamiast typowego 30% SELECT).</li>
+                            <li><strong>Wektor cech:</strong> Proporcje zapytań SELECT vs INSERT/UPDATE/DELETE.</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">📁 4. Rzadko używany zasób</div>
+                        <ul>
+                            <li><strong>Opis:</strong> Dostęp do tabel w granicach uprawnień, lecz rzadko lub nigdy dotąd nieodpytywanych przez użytkownika.</li>
+                            <li><strong>Wektor cech:</strong> Prawdopodobieństwo dostępu do tabeli (Categorical Distribution).</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SLAJD 6: Stochastyczny Generator Danych -->
+            <section>
+                <h2>Stochastyczny Generator Danych (Ground Truth)</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-header">⚙️ Eliminacja Sztywnych Granic</div>
+                        <ul>
+                            <li><strong>Odporność na artefakty:</strong> Użycie ciągłych rozkładów prawdopodobieństwa zamiast reguł <code>IF-ELSE</code>.</li>
+                            <li><strong>Realistyczna zmiana:</strong> Płynne brzegi rozkładów zapobiegają wyuczeniu przez ML "sztywnych cut-offów".</li>
+                            <li><strong>Pełny Ground Truth:</strong> Etykietowanie zdarzeń (ID scenariusza, klasa anomalii, poziom istotności 1-5).</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">📊 Zastosowane Rozkłady</div>
+                        <ul>
+                            <li><strong>Truncated Normal:</strong> Wolumen operacji oraz godziny aktywności z miękkimi brzegami (soft boundary).</li>
+                            <li><strong>Rozkład Beta:</strong> Ciągła proporcja zapytań SELECT vs INSERT ($\alpha=5.5, \beta=4.5$).</li>
+                            <li><strong>Poisson & Exponential:</strong> Liczba operacji w sesji oraz losowe odstępy czasowe (memoryless).</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SLAJD 7: Koncepcja Profilowania Behawioralnego (2 Karty) -->
+            <section>
+                <h2>Koncepcja Profilowania Behawioralnego</h2>
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <!-- KARTA 1: Wymiary Profilu -->
+                    <div class="card">
+                        <div class="card-header">⚙️ Kluczowe Wymiary Profilu</div>
+                        <ul>
+                            <li><strong>Zakres Dostępów:</strong> Dedykowany zestaw tabel i operacji SQL specyficzny dla roli.</li>
+                            <li><strong>Kontekst Środowiskowy:</strong> Domyślne okna czasowe oraz autoryzowane urządzenia.</li>
+                            <li><strong>Dynamika Operacji:</strong> Wolumen zapytań oraz częstotliwość generowania zdarzeń.</li>
+                        </ul>
+                    </div>
+
+                    <!-- KARTA 2: Stochastyka i Realizm -->
+                    <div class="card">
+                        <div class="card-header">🎲 Stochastyka i Sezonowość</div>
+                        <ul>
+                            <li><strong>Rozkłady Prawdopodobieństwa:</strong> Brak sztywnych granic <code>IF-ELSE</code> – modelowanie naturalnego szumu.</li>
+                            <li><strong>Cykle Biznesowe:</strong> Uwzględnienie skoków aktywności (np. rozliczenia CFO na koniec miesiąca).</li>
+                            <li><strong>Legalne Wyjątki:</strong> Rzadkie, poprawne odstępstwa utrudniające detekcję i weryfikujące FPR.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SLAJD 8: Metodyka Eksperymentalna (Schemat) -->
+            <section>
+                <h2>Metodyka Eksperymentalna</h2>
+                <div style="display: flex; flex-direction: column; align-items: center; margin-top: 20px;">
+                    <!-- Generator Block -->
+                    <div class="card" style="width: 50%; text-align: center; border: 1px solid var(--text-muted);">
+                        <h3 style="font-size: 1.1em; color: #fff; margin: 0 0 5px 0;">🎲 Stochastyczny Generator Danych</h3>
+                        <p style="font-size: 0.75em; color: var(--text-muted); margin: 0;">(Kontrolowane ziarna losowości – Seeds)</p>
+                    </div>
+
+                    <div style="font-size: 1.5em; color: var(--text-muted); margin: 8px 0;">⬇</div>
+
+                    <!-- Split Datasets Block -->
+                    <div class="grid-3" style="width: 100%; gap: 15px;">
+                        <div class="card" style="text-align: center; border-color: var(--accent-green);">
+                            <span class="badge" style="background: rgba(52, 211, 153, 0.15); color: var(--accent-green); border-color: var(--accent-green);">Zbiór Treningowy</span>
+                            <p style="font-size: 0.75em; margin: 10px 0 0 0; line-height: 1.4;">
+                                <strong>Wyłącznie Norma</strong><br>
+                                Nienadzorowana nauka czystego wzorca referencyjnego.
+                            </p>
+                        </div>
+                        <div class="card" style="text-align: center; border-color: var(--accent-purple);">
+                            <span class="badge badge-purple">Zbiór Walidacyjny</span>
+                            <p style="font-size: 0.75em; margin: 10px 0 0 0; line-height: 1.4;">
+                                <strong>Norma + Anomalie</strong><br>
+                                Strojenie parametrów modeli i progów odcięcia.
+                            </p>
+                        </div>
+                        <div class="card" style="text-align: center; border-color: var(--accent-warning);">
+                            <span class="badge badge-warning">Zbiór Testowy</span>
+                            <p style="font-size: 0.75em; margin: 10px 0 0 0; line-height: 1.4;">
+                                <strong>Niezależny (Nowy Seed)</strong><br>
+                                Izolowane obciążenie do weryfikacji generalizacji modeli.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style="font-size: 1.5em; color: var(--text-muted); margin: 8px 0;">⬇</div>
+
+                    <!-- Evaluation Block -->
+                    <div class="card" style="width: 60%; text-align: center; border-color: var(--accent-cyan);">
+                        <h3 style="font-size: 1.1em; color: var(--accent-cyan); margin: 0 0 5px 0;">📈 Ewaluacja i Porównanie Metod</h3>
+                        <p style="font-size: 0.75em; margin: 0; line-height: 1.4;">
+                            Badania ablacyjne zestawów cech • Ocena metryk: PR-AUC, MCC, FPR • Średnie wyniki &plusmn; odchylenie statystyczne
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SLAJD 9: Modele ML i Metryki Oceny -->
+            <section>
+                <h2>Badane Modele i Metryki Ewaluacji</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-header">🤖 Algorytmy Detekcji</div>
+                        <ul>
+                            <li><strong>Baseline Regułowy:</strong> Reguły deterministyczne (progi twarde).</li>
+                            <li><strong>Robust Statistics:</strong> Robust Z-Score bazujący na Medianie oraz MAD (Median Absolute Deviation).</li>
+                            <li><strong>Isolation Forest (iForest):</strong> Izolowanie punktów nietypowych.</li>
+                            <li><strong>Local Outlier Factor (LOF):</strong> Analiza gęstości lokalnej.</li>
+                            <li><strong>One-Class SVM:</strong> Wyznaczanie granicy hiperpłaszczyzny.</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">📏 Metryki Ewaluacji</div>
+                        <ul>
+                            <li><strong>Precision & Recall:</strong> Precyzja i pełność wykrywania anomalii.</li>
+                            <li><strong>PR-AUC:</strong> Pole pod krzywą Precision-Recall (kluczowe przy rzadkich zdarzeniach).</li>
+                            <li><strong>MCC:</strong> Współczynnik Matthews Correlation Coefficient.</li>
+                            <li><strong>FPR:</strong> Wskaźnik fałszywych alarmów (False Positive Rate).</li>
+                            <li><strong>NDCG@K & Precision@K:</strong> Ocena jakości rankingu alertów.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SLAJD 10: Podsumowanie / Zakończenie -->
+            <section style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                <h1 style="font-size: 2.2em; color: var(--accent-cyan); margin-bottom: 20px;">Dziękuję za uwagę</h1>
+                <p style="color: var(--text-muted); font-size: 1.2em;">
+                    Patryk Grys 251147
+                </p>
+            </section>
+
+        </div>
+    </div>
+
+    <!-- Reveal.js CDN JS (Wersja 5.1.0 wspierająca tryb przewijania) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+    <script>
+        // Konfiguracja do zachowania spójnych szerokości i proporcji na ekranie
+        Reveal.initialize({
+            controls: false,
+            progress: true,
+            center: false, // Środek układany jest teraz elastycznym CSS flexbox
+            hash: true,
+            transition: 'none',
+            backgroundTransition: 'none',
+            view: 'scroll',
+            scrollProgress: true,
+            width: 1280,   // Szerokość bazowa wspierająca proporcje 16:9
+            height: 720,   // Wysokość bazowa dla formatu 16:9
+            margin: 0.1,
+            minScale: 0.2,
+            maxScale: 2.0
+        });
+    </script>
+</body>
+</html>
