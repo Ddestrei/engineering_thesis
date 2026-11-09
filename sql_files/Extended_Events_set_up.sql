@@ -1,7 +1,7 @@
 USE [master];
 GO
 
--- 1. Usunięcie istniejącej sesji o tej samej nazwie (jeśli istnieje)
+--Usunięcie istniejącej sesji o tej samej nazwie jeśli istnieje
 IF EXISTS (SELECT 1 FROM sys.server_event_sessions WHERE name = N'AW2025_Behavioral_Anomaly_Session')
 BEGIN
     ALTER EVENT SESSION [AW2025_Behavioral_Anomaly_Session] ON SERVER STATE = STOP;
@@ -9,10 +9,10 @@ BEGIN
 END
 GO
 
--- 2. Utworzenie sesji Extended Events z pełnym wektorem cech audytowych i behawioralnych
+--Utworzenie sesji Extended Events z pełnym wektorem cech audytowych i behawioralnych
 CREATE EVENT SESSION [AW2025_Behavioral_Anomaly_Session] ON SERVER
 
--- A. Zdarzenie: Zapytania ad-hoc i batche T-SQL
+-- Zdarzenie: Zapytania ad-hoc i batche T-SQL
 ADD EVENT sqlserver.sql_batch_completed(
     ACTION(
         sqlserver.session_id,
@@ -26,13 +26,13 @@ ADD EVENT sqlserver.sql_batch_completed(
         package0.event_sequence
     )
     WHERE (
-        [sqlserver].[is_system] = (0) -- Odrzucenie procesów wewnętrznych silnika
+        [sqlserver].[is_system] = (0)
         AND [sqlserver].[database_name] = N'AdventureWorksLT2025'
-        AND [sqlserver].[username] <> N'NT SERVICE\SQLTELEMETRY' -- Odrzucenie szumu telemetrycznego CEIP
+        AND [sqlserver].[username] <> N'NT SERVICE\SQLTELEMETRY'
     )
 ),
 
--- B. Zdarzenie: Wywołania procedur składowanych (RPC)
+--Wywołania procedur składowanych
 ADD EVENT sqlserver.rpc_completed(
     ACTION(
         sqlserver.session_id,
@@ -52,7 +52,7 @@ ADD EVENT sqlserver.rpc_completed(
     )
 ),
 
--- C. Zdarzenie: Błędy wykonania zapytań (np. Permission Denied 229, błędy składni)
+--Błędy wykonania zapytań (np. Permission Denied 229, błędy składni)
 ADD EVENT sqlserver.error_reported(
     ACTION(
         sqlserver.session_id,
@@ -69,30 +69,27 @@ ADD EVENT sqlserver.error_reported(
         [sqlserver].[is_system] = (0)
         AND [sqlserver].[database_name] = N'AdventureWorksLT2025'
         AND [sqlserver].[username] <> N'NT SERVICE\SQLTELEMETRY'
-        AND [severity] >= 11 -- Błędy realne (odrzuca komunikaty informacyjne INFO 5701 i 5703 o severity 10)
+        AND [severity] >= 11 
     )
 )
 
--- Target: Asynchroniczny plik .xel
+--Stworzenie asynchronicznego plik .xel
 ADD TARGET package0.event_file(
     SET filename = N'C:\XELogs\AW2025_Behavioral_Anomaly.xel',
-        max_file_size = (100),       -- Maksymalny rozmiar pliku w MB
-        max_rollover_files = (10)    -- Liczba plików w pętli
+        max_file_size = (100),       
+        max_rollover_files = (10)    
 )
 WITH (
     MAX_MEMORY = 8192 KB,
     EVENT_RETENTION_MODE = ALLOW_SINGLE_EVENT_LOSS,
-    MAX_DISPATCH_LATENCY = 3 SECONDS, -- Maksymalne opóźnienie zapisu na dysk
+    MAX_DISPATCH_LATENCY = 3 SECONDS, 
     MAX_EVENT_SIZE = 0 KB,
     MEMORY_PARTITION_MODE = NONE,
-    TRACK_CAUSALITY = ON,            -- Ułatwia śledzenie sekwencji zdarzeń i ActivityId
+    TRACK_CAUSALITY = ON,            
     STARTUP_STATE = OFF
 );
 GO
 
--- 3. Uruchomienie sesji XE
+--Uruchomienie sesji XE
 ALTER EVENT SESSION [AW2025_Behavioral_Anomaly_Session] ON SERVER STATE = START;
-GO
-
-PRINT 'Sesja XE [AW2025_Behavioral_Anomaly_Session] została pomyślnie uruchomiona (bez szumów telemetrycznych).';
 GO

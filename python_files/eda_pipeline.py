@@ -1,10 +1,5 @@
 """
-=============================================================================
-Projekt Badawczy: Detekcja Anomalii Behawioralnych w Bazie Danych SQL Server
-Moduł: Eksploracyjna Analiza Danych (EDA) & Ekstrakcja Wektorów Cech ML
-Autor: Senior Data Scientist & ML Engineer
-Modele docelowe: Isolation Forest, One-Class SVM, Local Outlier Factor (LOF)
-=============================================================================
+Realizuje kompleksową Eksploracyjną Analizę Danych wygenerowanych wektorów logów z Extended Events, tworząc zestaw 6 wykresów naukowych.
 """
 
 import os
@@ -22,10 +17,8 @@ from sklearn.preprocessing import RobustScaler, StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
-# Wyciszenie ostrzeżeń bibliotecznych dla czystości logów i raportów
 warnings.filterwarnings("ignore")
 
-# Globalna estetyka wykresów zgodna ze standardami publikacji naukowych
 sns.set_theme(style="whitegrid", palette="tab10")
 plt.rcParams.update({
     "font.family": "sans-serif",
@@ -39,8 +32,7 @@ plt.rcParams.update({
     "figure.dpi": 150
 })
 
-# Dedykowana paleta kolorystyczna dla klas: Norma vs Anomalia
-PALETTE_ANOMALY = ["#2b5c8f", "#d95f02"]  # Morski granat vs Intensywny pomarańcz
+PALETTE_ANOMALY = ["#2b5c8f", "#d95f02"]  
 
 # Mapowanie 25 cech wektora ML zgodnie ze specyfikacją projektu
 FEATURE_NAMES: List[str] = [
@@ -83,8 +75,7 @@ CONTINUOUS_METRICS: List[str] = [
 
 def load_dataset(file_path: Union[str, Path]) -> pd.DataFrame:
     """
-    Wczytuje zbiór danych z pliku JSON (struktura zagnieżdżona z Extended Events)
-    lub pliku CSV (zbiory z generatora). Spłaszcza obiekty GroundTruth i Context
+    Wczytuje zbiór danych z pliku JSON lub pliku CSV. Spłaszcza obiekty GroundTruth i Context
     oraz mapuje 25 elementów tablicy Features na dedykowane, nazwane kolumny.
     """
     path = Path(file_path)
@@ -118,7 +109,6 @@ def load_dataset(file_path: Union[str, Path]) -> pd.DataFrame:
                 "ErrorMessage": ctx.get("ErrorMessage", "")
             }
 
-            # Mapowanie 25 cech wektora Features
             for idx, col_name in enumerate(FEATURE_NAMES):
                 rec[col_name] = feats[idx] if idx < len(feats) else 0
 
@@ -149,7 +139,6 @@ def load_dataset(file_path: Union[str, Path]) -> pd.DataFrame:
             }
             df = df.rename(columns=rename_map)
 
-    # Standaryzacja etykiet czytelnych dla wykresów
     if "IsAnomaly" in df.columns:
         df["IsAnomaly"] = df["IsAnomaly"].astype(int)
         df["AnomalyLabel"] = df["IsAnomaly"].map({0: "Norma", 1: "Anomalia"})
@@ -157,7 +146,6 @@ def load_dataset(file_path: Union[str, Path]) -> pd.DataFrame:
     if "AnomalyClass" in df.columns:
         df["AnomalyClass"] = df["AnomalyClass"].fillna("None").astype(str)
 
-    # Parsowanie daty i wzbogacenie o transformacje nieliniowe log1p
     if "Timestamp" in df.columns:
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
 
@@ -171,7 +159,7 @@ def load_dataset(file_path: Union[str, Path]) -> pd.DataFrame:
 
 def plot_univariate_continuous(df: pd.DataFrame, output_dir: Optional[Path] = None):
     """
-    Krok 2.1: Rozkłady zmiennych ciągłych (KDE + Boxploty).
+    Rozkłady zmiennych ciągłych (KDE + Boxploty).
     Prezentuje rozkłady na skali logarytmicznej w celu uwypuklenia grubych ogonów (heavy-tail).
     """
     metrics = ["DurationMicroseconds", "LogicalReads", "RowCount", "SqlTextLength"]
@@ -183,7 +171,6 @@ def plot_univariate_continuous(df: pd.DataFrame, output_dir: Optional[Path] = No
 
         log_metric = f"log_{metric}"
 
-        # Histogram z estymacją gęstości jądrowej (KDE)
         ax_kde = axes[i, 0]
         sns.histplot(
             data=df,
@@ -200,7 +187,6 @@ def plot_univariate_continuous(df: pd.DataFrame, output_dir: Optional[Path] = No
         ax_kde.set_xlabel(f"log1p({metric})")
         ax_kde.set_ylabel("Gęstość prawdopodobieństwa")
 
-        # Boxplot porównawczy z oznaczeniem średniej (biały punkt)
         ax_box = axes[i, 1]
         sns.boxplot(
             data=df,
@@ -225,12 +211,11 @@ def plot_univariate_continuous(df: pd.DataFrame, output_dir: Optional[Path] = No
 
 def plot_univariate_temporal(df: pd.DataFrame, output_dir: Optional[Path] = None):
     """
-    Krok 2.2: Analiza periodyczności i cech czasowych (HourOfDay, DayOfWeek).
+    Analiza periodyczności i cech czasowych (HourOfDay, DayOfWeek).
     Pozwala zidentyfikować anomalie behawioralne typu 'unusual_time'.
     """
     fig, axes = plt.subplots(1, 2, figsize=(16, 5))
 
-    # Rozkład zapytań w ujęciu godzinowym
     ax_hour = axes[0]
     sns.countplot(
         data=df,
@@ -243,7 +228,6 @@ def plot_univariate_temporal(df: pd.DataFrame, output_dir: Optional[Path] = None
     ax_hour.set_xlabel("Godzina w ciągu doby (0 - 23)")
     ax_hour.set_ylabel("Liczba operacji")
 
-    # Rozkład zapytań w ujęciu dni tygodnia
     ax_day = axes[1]
     days_labels = ["Niedz (0)", "Pon (1)", "Wt (2)", "Śr (3)", "Czw (4)", "Pt (5)", "Sob (6)"]
     sns.countplot(
@@ -267,7 +251,7 @@ def plot_univariate_temporal(df: pd.DataFrame, output_dir: Optional[Path] = None
 
 def plot_multivariate_correlation(df: pd.DataFrame, output_dir: Optional[Path] = None):
     """
-    Krok 3.1: Macierz korelacji rangowej Spearmana.
+    Macierz korelacji rangowej Spearmana.
     Wybór Spearmana zamiast Pearsona wynika z faktu, że metryki wykonania zapytań
     charakteryzują się nieliniowymi zależnościami monotonicznymi i dużą asymetrią.
     """
@@ -302,12 +286,11 @@ def plot_multivariate_correlation(df: pd.DataFrame, output_dir: Optional[Path] =
 
 def plot_multivariate_scatter(df: pd.DataFrame, output_dir: Optional[Path] = None):
     """
-    Krok 3.2: Relacje wielowymiarowe z kolorowaniem według podklas anomalii (AnomalyClass).
+    Relacje wielowymiarowe z kolorowaniem według podklas anomalii (AnomalyClass).
     Umożliwia ocenę rozłączności klastrów nietypowych obciążeń w przestrzeni cech.
     """
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-    # Wykres 1: Godzina doby vs logarytmiczne odczyty logiczne
     ax1 = axes[0]
     sns.scatterplot(
         data=df,
@@ -323,7 +306,6 @@ def plot_multivariate_scatter(df: pd.DataFrame, output_dir: Optional[Path] = Non
     ax1.set_xlabel("Godzina w ciągu doby (HourOfDay)")
     ax1.set_ylabel("log1p(LogicalReads)")
 
-    # Wykres 2: Zależność zasobożerności: Odczyty logiczne vs Czas trwania
     ax2 = axes[1]
     sns.scatterplot(
         data=df,
@@ -347,13 +329,12 @@ def plot_multivariate_scatter(df: pd.DataFrame, output_dir: Optional[Path] = Non
 
 def plot_temporal_volume_analysis(df: pd.DataFrame, output_dir: Optional[Path] = None):
     """
-    Krok 4: Analiza wolumenu w czasie oraz struktury sesji.
-    Wizualizuje skoki częstotliwości zapytań (volume_spike) w oknach czasowych 1h
+    Analiza wolumenu w czasie oraz struktury sesji.
+    Wizualizuje skoki częstotliwości zapytań w oknach czasowych 1h
     oraz rozkład liczby zapytań przypadających na pojedynczą sesję bazy danych.
     """
     fig, axes = plt.subplots(2, 1, figsize=(15, 10))
 
-    # Analiza szeregu czasowego w oknach godzinowych
     ax_time = axes[0]
     if "Timestamp" in df.columns and df["Timestamp"].notna().any():
         df_sorted = df.dropna(subset=["Timestamp"]).sort_values("Timestamp").copy()
@@ -374,14 +355,12 @@ def plot_temporal_volume_analysis(df: pd.DataFrame, output_dir: Optional[Path] =
         ax_time.set_ylabel("Liczba wykonanych zapytań")
         ax_time.set_xlabel("Oś czasu (Miesiąc-Dzień Godzina)")
 
-        # Redukcja zagęszczenia etykiet osi czasu
         ticks = [i for i in range(0, len(resampled_df), max(1, len(resampled_df) // 12))]
         ax_time.set_xticks(ticks)
         ax_time.set_xticklabels([resampled_df.index[i].strftime("%m-%d %H:%M") for i in ticks], rotation=30)
     else:
         ax_time.text(0.5, 0.5, "Brak znaczników Timestamp do analizy szeregu", ha="center")
 
-    # Rozkład zapytań w ramach pojedynczego SessionId
     ax_sess = axes[1]
     if "SessionId" in df.columns:
         sess_counts = df.groupby(["SessionId", "AnomalyLabel"]).size().reset_index(name="QueryCount")
@@ -410,13 +389,12 @@ def plot_temporal_volume_analysis(df: pd.DataFrame, output_dir: Optional[Path] =
 
 def plot_dimensionality_reduction(df: pd.DataFrame, output_dir: Optional[Path] = None):
     """
-    Krok 5: Redukcja wymiarowości (RobustScaler + PCA).
+    Redukcja wymiarowości (RobustScaler + PCA).
     Badanie separowalności podklas anomalii w rzucie na przestrzeń 2D oraz wykres Scree Plot.
     """
     feat_cols = [c for c in FEATURE_NAMES if c in df.columns]
     X = df[feat_cols].values
 
-    # Używamy RobustScaler (odpornego na wartości odstające), opierającego się na medianie i IQR
     scaler = RobustScaler()
     X_scaled = scaler.fit_transform(X)
 
@@ -425,7 +403,6 @@ def plot_dimensionality_reduction(df: pd.DataFrame, output_dir: Optional[Path] =
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-    # Wykres 1: Scree Plot (udział wariancji wyjaśnionej)
     ax_scree = axes[0]
     exp_var = pca.explained_variance_ratio_
     cum_var = np.cumsum(exp_var)
@@ -438,7 +415,6 @@ def plot_dimensionality_reduction(df: pd.DataFrame, output_dir: Optional[Path] =
     ax_scree.axhline(0.9, color="grey", linestyle="--", alpha=0.8, label="Próg informacyjny 90%")
     ax_scree.legend(loc="best")
 
-    # Wykres 2: Projekcja 2D (PC1 vs PC2) z etykietami AnomalyClass
     ax_pca = axes[1]
     plot_df = pd.DataFrame({
         "PC1": X_pca[:, 0],
@@ -508,7 +484,6 @@ def run_eda(file_path: Union[str, Path], output_dir: str = "eda_plots"):
 
 
 if __name__ == "__main__":
-    # Domyślne uruchomienie dla najnowszego pliku JSON z loggera XEvents
     default_log = Path("LOGI/ml_feature_vectors_20261106_104658.json")
     if default_log.exists():
         run_eda(default_log)

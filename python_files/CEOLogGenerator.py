@@ -1,32 +1,31 @@
 from __future__ import annotations
-
 import uuid
 from datetime import datetime, timedelta, date
 from typing import List, Optional, Tuple, Dict
-
 import numpy as np
 import pandas as pd
-
 from CEOProfileConfig import CEOProfileConfig
 from AnomalyConfig import AnomalyConfig
-
+"""
+Główny stochastyczny silnik generujący syntetyczne logi telemetryczne aktywności CEO 
+dla trzech wyizolowanych zbiorów (Train, Validation, Test).
+"""
+#losuje element z dyskretnego rozkładu prawdopodobieństwa na podstawie podanych wag.
 def _weighted_choice(rng: np.random.Generator,
                      weights: Dict[str, float]) -> str:
-    """Losuje klucz z rozkładu kategorycznego"""
     keys = list(weights.keys())
     probs = np.array(list(weights.values()), dtype=float)
     probs /= probs.sum()
     return rng.choice(keys, p=probs)
 
+#losuje godzinę operacji z rozkładu normalnego obciętego do zdefiniowanego okna czasowego urządzenia.
 def _sample_hour(rng: np.random.Generator, tw: dict) -> float:
-    """
-    Losuje godzinę float z rozkład normalnego okna czasowego
-    """
     return _truncated_normal(
         rng, tw["hour_mean"], tw["hour_std"],
         tw["hour_clip_low"], tw["hour_clip_high"]
     )
 
+#losuje poziom istotności incydentu (1–5) na podstawie wag prawdopodobieństwa.
 def _random_severity(rng: np.random.Generator,
                      severity_weights: Dict[int, float]) -> int:
     levels = list(severity_weights.keys())
@@ -34,42 +33,31 @@ def _random_severity(rng: np.random.Generator,
     probs /= probs.sum()
     return int(rng.choice(levels, p=probs))
 
-
+#losuje dzień tygodnia dla operacji, uwzględniając preferowane dni robocze oraz prawdopodobieństwo incydentalnego przejścia na dni sąsiednie.
 def _pick_day(rng: np.random.Generator, tw: dict) -> int:
-    """
-    Losuje dzień tygodnia z uwzględnieniem small spillover probability
-    na sąsiednie dni
-    """
     if tw["spillover_days"] and rng.random() < tw["spillover_prob"]:
         return rng.choice(tw["spillover_days"])
     return rng.choice(tw["preferred_days"])
 
+#tworzy deterministyczny identyfikator UUID dla sesji na podstawie generatora liczb pseudolosowych.
 def _make_uuid(rng: np.random.Generator) -> str:
-    #Generuje deterministyczny UUID z dwóch 63-bitowych losowań
     return str(uuid.UUID(
         int=int(rng.integers(0, 2**63)) | (int(rng.integers(0, 2**63)) << 64)
     ))
 
+#losuje wartość z rozkładu normalnego z twardym obcięciem do przedziału [low, high], zapewniając miękkie granice danych.
 def _truncated_normal(rng: np.random.Generator, mean: float, std: float,
                       low: float, high: float) -> float:
-    """
-    Losuje wartość z rozkładu normalnego obciętego do [low, high]
-    Używany zamiast uniform, aby granice były miękkie
-    Gęstość przy skrajnych wartościach jest niska, więc model nie może wyuczyć się
-    ostrych granic
-    """
     for _ in range(1000):
         val = rng.normal(mean, std)
         if low <= val <= high:
             return val
     return np.clip(rng.normal(mean, std), low, high)
 
-
+"""
+Klasa odpowiadająca za generowanie pełnych harmonogramów operacji miesięcznych dla CEO oraz nakładanie etykietowanych incydentów bezpieczeństwa.
+"""
 class CEOLogGenerator:
-    """
-    Stochastyczny generator logów aktywności CEO
-    """
-
     def __init__(
         self,
         train_seed: int = 42,
@@ -86,7 +74,6 @@ class CEOLogGenerator:
         self.profile = profile or CEOProfileConfig()
         self.anomaly_cfg = anomaly_cfg or AnomalyConfig()
 
-        # Każdy zbiór zaczyna się 1. dnia kolejnego miesiąca
         base = start_date or date(2026, 1, 1)
         self._train_start = base
         self._val_start = date(base.year, base.month + 1, 1) if base.month < 12 \
@@ -94,55 +81,37 @@ class CEOLogGenerator:
         m = self._val_start.month
         self._test_start = date(self._val_start.year, m + 1, 1) if m < 12 \
             else date(self._val_start.year + 1, 1, 1)
-
+    #generuje zbiór treningowy zawierający w 100% wyłącznie normalną aktywność.
     def generate_train(self) -> pd.DataFrame:
-        """
-        Zbiór treningowy zawiera wyłącznie normalną aktywność, brak anomalii
-        Modele nienadzorowane uczą się na nim normy
-        """
         rng = np.random.default_rng(self.train_seed)
         records = self._generate_normal_month(rng, self._train_start)
         return self._to_dataframe(records)
-
+    #generuje zbiór walidacyjny zawierający ruch normalny oraz wstrzyknięte, znane warianty anomalii.
     def generate_val(self) -> pd.DataFrame:
-        """
-        Zbiór walidacyjny zawiera normalnż aktywność + kontrolowane anomalie
-        Służy do doboru progów i parametrów modelu
-        """
         rng = np.random.default_rng(self.val_seed)
         normal = self._generate_normal_month(rng, self._val_start)
         anomalies = self._inject_anomalies(rng, self._val_start, self.anomaly_cfg)
         return self._to_dataframe(normal + anomalies)
 
+    #generuje zbiór testowy na nowym ziarnie losowości z perturbacją parametrów profilu i anomalii.
     def generate_test(self) -> pd.DataFrame:
-        """
-        Zbiór testowy powstaje na podstawie nowego seed-a i 
-        zawiera delikatnie zaburzone parametry rozkładów wariantów anomalii
-        Testuje generalizację modelu i zapobiega wyuczeniu się artefaktów generatora
-        """
         rng = np.random.default_rng(self.test_seed)
-
-        # Perturbacja profilu dodaje drobne przesunięcia parametrów, aby test
-        # nie był kopią val z innym seedem
         test_profile = self._perturbed_profile(rng)
         original = self.profile
         self.profile = test_profile
 
         normal = self._generate_normal_month(rng, self._test_start)
 
-        # Anomalie z nieznacznie zmienionymi parametrami
         test_anomaly_cfg = self._perturbed_anomaly_config(rng)
         anomalies = self._inject_anomalies(rng, self._test_start, test_anomaly_cfg)
 
         self.profile = original
         return self._to_dataframe(normal + anomalies)
-
+    
+    #symuluje 1 miesiąc legalnej pracy CEO w podziale na tygodnie, sesje i operacje bazodanowe.
     def _generate_normal_month(
         self, rng: np.random.Generator, month_start: date
     ) -> List[dict]:
-        """
-        Generuje normalny ruch CEO na przestrzeni 1 miesiąca
-        """
         month_end = self._month_end(month_start)
         records: List[dict] = []
 
@@ -150,7 +119,6 @@ class CEOLogGenerator:
         while week_start < month_end:
             week_end = min(week_start + timedelta(days=7), month_end)
 
-            
             weekly_ops = int(round(_truncated_normal(
                 rng,
                 self.profile.weekly_ops_mean,
@@ -240,7 +208,7 @@ class CEOLogGenerator:
 
         return records
 
-
+    #generuje i nakłada 4 klasy anomalii z unikalnymi identyfikatorami scenario_id.
     def _inject_anomalies(
         self, rng: np.random.Generator, month_start: date,
         cfg: AnomalyConfig
@@ -252,7 +220,6 @@ class CEOLogGenerator:
         month_end = self._month_end(month_start)
         all_anomalies: List[dict] = []
 
-        #Nietypowa pora
         for _ in range(cfg.unusual_time_count):
             scenario_id = f"ANOM_TIME_{rng.integers(0, 2**32):08x}"
             day = self._random_date_in_range(rng, month_start, month_end)
@@ -303,7 +270,6 @@ class CEOLogGenerator:
                     "severity_level": severity,
                 })
 
-        # B)Gwałtowny wzrost wolumenu
         for _ in range(cfg.volume_spike_count):
             scenario_id = f"ANOM_VOLUME_{rng.integers(0, 2**32):08x}"
             day = self._random_weekday(rng, month_start, month_end)
@@ -338,7 +304,6 @@ class CEOLogGenerator:
                     "severity_level": severity,
                 })
 
-        # C)Nietypowa pora operacji
         for _ in range(cfg.unusual_ratio_count):
             scenario_id = f"ANOM_RATIO_{rng.integers(0, 2**32):08x}"
             day = self._random_weekday(rng, month_start, month_end)
@@ -356,7 +321,6 @@ class CEOLogGenerator:
                 ts = datetime.combine(day, datetime.min.time()) + \
                      timedelta(hours=hour,
                                seconds=rng.uniform(0, 5400))
-                # Anomalia: odwrócona proporcja – dominacja INSERT
                 op = "INSERT" if rng.random() < insert_frac else "SELECT"
                 table = _weighted_choice(rng, self.profile.insert_table_weights)
                 all_anomalies.append({
@@ -375,7 +339,6 @@ class CEOLogGenerator:
                     "severity_level": severity,
                 })
 
-        # D)Dostęp do rzadko urzywanego zasobu 
         for _ in range(cfg.rare_resource_count):
             scenario_id = f"ANOM_RARE_{rng.integers(0, 2**32):08x}"
             day = self._random_weekday(rng, month_start, month_end)
@@ -410,11 +373,8 @@ class CEOLogGenerator:
 
         return all_anomalies
 
+    #tworzy kopię profilu z losowo zaburzonymi parametrami rozkładów, uniemożliwiając modelom zapamiętanie stałych wzorców.
     def _perturbed_profile(self, rng: np.random.Generator) -> CEOProfileConfig:
-        """
-        Tworzy kopię profilu z nieznacznie zaburzonymi parametrami
-        Celem tego działania jest to że zbiór testowy nie jest kopią walidacyjnego z innym seedem
-        """
         p = self.profile
 
         def jitter(val: float, pct: float = 0.10) -> float:
@@ -441,7 +401,7 @@ class CEOLogGenerator:
                 p.intra_session_interval_beta, 0.10
             ),
         )
-
+    #modyfikuje liczności i zakresy anomalii na potrzeby trudniejszego zbioru testowego.
     def _perturbed_anomaly_config(
         self, rng: np.random.Generator
     ) -> AnomalyConfig:
@@ -473,7 +433,6 @@ class CEOLogGenerator:
             rare_resource_ops_range=jitter_range(cfg.rare_resource_ops_range),
             severity_weights=cfg.severity_weights.copy(),
         )
-
 
     @staticmethod
     def _month_end(month_start: date) -> date:

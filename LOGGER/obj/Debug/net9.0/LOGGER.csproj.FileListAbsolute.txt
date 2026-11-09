@@ -17,3 +17,4 @@ C:\Users\ddest\Desktop\INŻYNIERKA\LOGGER\obj\Debug\net9.0\LOGGER.pdb
 C:\Users\ddest\Desktop\INŻYNIERKA\LOGGER\obj\Debug\net9.0\LOGGER.genruntimeconfig.cache
 C:\Users\ddest\Desktop\INŻYNIERKA\LOGGER\obj\Debug\net9.0\ref\LOGGER.dll
 C:\Users\ddest\Desktop\INŻYNIERKA\LOGGER\bin\Debug\net9.0\Microsoft.SqlServer.XE.Core.dll
+C:\Users\ddest\Desktop\INŻYNIERKA\LOGGER\obj\Debug\net9.0\LOGGER.sourcelink.json

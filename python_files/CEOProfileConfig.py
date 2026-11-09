@@ -2,7 +2,7 @@ from typing import Dict
 from dataclasses import dataclass, field
 
 """
-Konfiguracja profilu urzytkownika CEO
+Zawiera matematyczny profil rutynowych zachowań użytkownika CEO oparty na rozkładach prawdopodobieństwa
 Każdy parametr opisuje rozkład nigdy twardą regułę. dzięki temu
 granice danych są „miękkie" i nie da się ich trywialnie wyuczyć.
 """

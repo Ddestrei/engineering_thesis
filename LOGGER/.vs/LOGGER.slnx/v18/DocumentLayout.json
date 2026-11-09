@@ -3,16 +3,20 @@
   "WorkspaceRootPath": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|c:\\users\\ddest\\desktop\\in\u017Cynierka\\logger\\mlfeatureexporter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|solutionrelative:mlfeatureexporter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|c:\\users\\ddest\\desktop\\in\u017Cynierka\\logger\\anomalyfeaturerecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|solutionrelative:anomalyfeaturerecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|c:\\users\\ddest\\desktop\\in\u017Cynierka\\logger\\xelogreader.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|solutionrelative:xelogreader.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|c:\\users\\ddest\\desktop\\in\u017Cynierka\\logger\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|c:\\users\\ddest\\desktop\\in\u017Cynierka\\logger\\logger.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}",
-      "RelativeMoniker": "D:0:0:{24BCE173-D81B-7429-6E8A-E368CA902609}|LOGGER.csproj|solutionrelative:logger.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}"
     }
   ],
   "DocumentGroupContainers": [
@@ -22,7 +26,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 2,
+          "SelectedChildIndex": 1,
           "Children": [
             {
               "$type": "Bookmark",
@@ -30,32 +34,46 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "LOGGER.csproj",
-              "DocumentMoniker": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\LOGGER.csproj",
-              "RelativeDocumentMoniker": "LOGGER.csproj",
-              "ToolTip": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\LOGGER.csproj",
-              "RelativeToolTip": "LOGGER.csproj",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAAOAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
-              "WhenOpened": "2026-10-29T11:27:53.727Z"
+              "DocumentIndex": 0,
+              "Title": "MLFeatureExporter.cs",
+              "DocumentMoniker": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\MLFeatureExporter.cs",
+              "RelativeDocumentMoniker": "MLFeatureExporter.cs",
+              "ToolTip": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\MLFeatureExporter.cs",
+              "RelativeToolTip": "MLFeatureExporter.cs",
+              "ViewState": "AgIAAGEAAAAAAAAAAAAgwG8AAAAPAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-11-09T10:37:07.675Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
+              "Title": "AnomalyFeatureRecord.cs",
+              "DocumentMoniker": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\AnomalyFeatureRecord.cs",
+              "RelativeDocumentMoniker": "AnomalyFeatureRecord.cs",
+              "ToolTip": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\AnomalyFeatureRecord.cs",
+              "RelativeToolTip": "AnomalyFeatureRecord.cs",
+              "ViewState": "AgIAABUAAAAAAAAAAAAkwAoAAAALAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-11-09T10:36:19.951Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
               "Title": "XeLogReader.cs",
               "DocumentMoniker": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\XeLogReader.cs",
               "RelativeDocumentMoniker": "XeLogReader.cs",
               "ToolTip": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\XeLogReader.cs",
               "RelativeToolTip": "XeLogReader.cs",
-              "ViewState": "AgIAAJQAAAAAAAAAAADwv+QAAAAFAAAAAAAAAA==",
+              "ViewState": "AgIAAOEAAAAAAAAAAAAiwOsAAAAOAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-10-29T11:23:18.724Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 3,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\ddest\\Desktop\\IN\u017BYNIERKA\\LOGGER\\Program.cs",
               "RelativeDocumentMoniker": "Program.cs",
@@ -63,8 +81,7 @@
               "RelativeToolTip": "Program.cs",
               "ViewState": "AgIAAAoAAAAAAAAAAAA1wIgAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-10-29T11:21:34.067Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-10-29T11:21:34.067Z"
             }
           ]
         }

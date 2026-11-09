@@ -14,7 +14,7 @@ namespace LOGGER
             Console.WriteLine(" LOGGER (.NET 9) - Extended Events to ML Feature JSON Extractor");
             Console.WriteLine("=================================================================\n");
 
-            // 1. Ustalenie ścieżki pliku .xel (argument lub automatyczne wykrycie)
+            //Ustalenie ścieżki pliku .xel
             string xelPath = "";
             if (args.Length > 0 && !string.IsNullOrWhiteSpace(args[0]))
             {
@@ -46,7 +46,7 @@ namespace LOGGER
                 }
             }
 
-            // 2. Ustalenie ścieżki wyjściowej JSON
+            //Ustalenie ścieżki wyjściowej JSON
             string jsonOutputPath = "";
             if (args.Length > 1 && !string.IsNullOrWhiteSpace(args[1]))
             {
@@ -83,7 +83,7 @@ namespace LOGGER
                 return;
             }
 
-            // 3. Sprawdzenie opcjonalnego filtra użytkownika (np. --user CEO_User)
+            //Sprawdzenie opcjonalnego filtra użytkownika (np. --user CEO_User)
             string? userFilter = null;
             for (int i = 0; i < args.Length - 1; i++)
             {
@@ -104,7 +104,7 @@ namespace LOGGER
                 Console.WriteLine($"[FILTR] Zastosowano filtr użytkownika: {userFilter} (pozostało zdarzeń: {records.Count})");
             }
 
-            // 4. Statystyki wyekstrahowanych cech
+            //Statystyki wyekstrahowanych cech
             int normalCount = records.Count(r => r.IsAnomaly == 0);
             int anomalyCount = records.Count(r => r.IsAnomaly == 1);
             Console.WriteLine($"\n[2/3] Statystyka Ground Truth:");
@@ -123,7 +123,7 @@ namespace LOGGER
                                  .Select(g => $"{g.Key}: {g.Count()}");
             Console.WriteLine($"   * Konteksty urządzeń:  {string.Join(", ", devices)}");
 
-            // 4. Eksport do JSON
+            //Eksport do JSON
             Console.WriteLine($"\n[3/3] Zapisywanie ustrukturyzowanych cech ML do JSON: {jsonOutputPath}...");
             await MLFeatureExporter.SaveFeatureVectorsToJsonAsync(records, jsonOutputPath);
 

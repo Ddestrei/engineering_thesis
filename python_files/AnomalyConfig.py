@@ -9,8 +9,6 @@ class AnomalyConfig:
     """
     Parametry kontrolujące wstrzykiwanie anomalii do zbiorów Val/Test
     Każda anomalia jest niezależnym incydentem nakładanym na normalny ruch
-    """
-    """
     Parametry określają ile incydentów każdej klasy wstrzyknąć w miesiąc
     Wartości dobrane tak, aby anomalie stanowiły ~10-20% całego ruchu
     """
