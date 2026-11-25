@@ -54,8 +54,8 @@ namespace LOGGER
             }
             else
             {
-                string logiDir = @"C:\Users\ddest\Desktop\INŻYNIERKA\LOGI";
-                jsonOutputPath = Path.Combine(logiDir, $"ml_feature_vectors_{DateTime.Now:yyyyMMdd_HHmmss}.json");
+                string outputDir = ResolveDefaultOutputDir();
+                jsonOutputPath = Path.Combine(outputDir, $"ml_feature_vectors_{DateTime.Now:yyyyMMdd_HHmmss}.json");
             }
 
             Console.WriteLine($"[1/3] Odczyt i ekstrakcja zdarzeń Extended Events z: {xelPath}...");
@@ -131,6 +131,36 @@ namespace LOGGER
             Console.WriteLine($"\n-> Sukces! Plik JSON został wygenerowany pomyślnie.");
             Console.WriteLine($"   Ścieżka: {jsonOutputPath}");
             Console.ResetColor();
+        }
+
+        /// <summary>
+        /// Domyślny katalog wyjściowy: data/xe_json w katalogu głównym repozytorium.
+        /// Repozytorium szukane jest w górę od katalogu programu i od katalogu bieżącego
+        /// (rozpoznawane po pliku config.example.json). Można je nadpisać zmienną środowiskową
+        /// ANOMALY_XE_JSON_DIR albo drugim argumentem programu.
+        /// </summary>
+        private static string ResolveDefaultOutputDir()
+        {
+            string? fromEnv = Environment.GetEnvironmentVariable("ANOMALY_XE_JSON_DIR");
+            if (!string.IsNullOrWhiteSpace(fromEnv))
+            {
+                return fromEnv;
+            }
+
+            foreach (string start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+            {
+                DirectoryInfo? dir = new DirectoryInfo(start);
+                while (dir != null)
+                {
+                    if (File.Exists(Path.Combine(dir.FullName, "config.example.json")))
+                    {
+                        return Path.Combine(dir.FullName, "data", "xe_json");
+                    }
+                    dir = dir.Parent;
+                }
+            }
+
+            return Path.Combine(Directory.GetCurrentDirectory(), "xe_json");
         }
     }
 }

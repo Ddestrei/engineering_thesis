@@ -14,14 +14,16 @@ class CEOProfileConfig:
     """
     weekly_ops_mean: float = 31.0           # μ wolumenu tygodniowego
     weekly_ops_std: float = 8.0             # σ – naturalny rozrzut
-    weekly_ops_clip_low: float = 8.0        # dolne obcięcie (twarda ochrona)
-    weekly_ops_clip_high: float = 60.0      # górne obcięcie
+    weekly_ops_clip_low: float = 14.0       # dolne obcięcie (profil: 14–48 operacji/tydzień)
+    weekly_ops_clip_high: float = 48.0      # górne obcięcie
 
     """
-    Rozkład Beta parametryzuje udział SELECT w całości operacji
+    Rozkład Beta parametryzuje udział SELECT w całości operacji.
+    Profil CEO (METODOLOGIA D15): SELECT 85–95%, INSERT 5–15%.
+    Beta(128.7, 14.3): średnia 0.90, odchylenie ~0.025 → ~95% tygodni w przedziale [0.85, 0.95].
     """
-    select_ratio_alpha: float = 5.5
-    select_ratio_beta: float = 4.5
+    select_ratio_alpha: float = 128.7
+    select_ratio_beta: float = 14.3
 
     """
     Dla SELECT tabela jest losowana z rozkładu kategorycznego drobna szansa na niestandardowy wybór zapobiega hard-boundariom
@@ -33,14 +35,11 @@ class CEOProfileConfig:
     })
 
     """
-    INSERT CEO pisze niemal wyłącznie do Customer
-    Mikro-prawdopodobieństwo (0.01) pozwala na sporadyczne „pomyłki"
-    w normalnym ruchu, dzięki czemu model nie zapamięta, że INSERT w inną tabelę to anomalia
+    INSERT CEO wyłącznie do Customer. To jedyna tabela, do której CEO ma prawo INSERT;
+    generator tworzy tylko operacje zgodne z uprawnieniami (METODOLOGIA D3).
     """
     insert_table_weights: Dict[str, float] = field(default_factory=lambda: {
-        "Customer": 0.98,
-        "SalesOrderHeader": 0.01,
-        "Product": 0.01,
+        "Customer": 1.0,
     })
 
     #Opis użytkownika

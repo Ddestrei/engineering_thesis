@@ -11,6 +11,8 @@ class DBConfig:
     driver: Optional[str] = None
     trusted_connection: bool = False
     username: Optional[str] = "CEO_User"
-    password: Optional[str] = "CeoPass2026!Secure#"
+    # Hasło nie jest zapisane w kodzie. Gdy None, pobierane jest przy łączeniu
+    # ze zmiennej środowiskowej albo z config.local.json (anomaly/settings.py).
+    password: Optional[str] = None
     trust_server_certificate: bool = True
     login_timeout: int = 5

@@ -6,9 +6,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import List
-from DBConfig import DBConfig
-from ExecutionConfig import ExecutionConfig
-from DBWorkloadExecutor import logger, DBWorkloadExecutor
+from anomaly.execution.DBConfig import DBConfig
+from anomaly.execution.ExecutionConfig import ExecutionConfig
+from anomaly.execution.DBWorkloadExecutor import logger, DBWorkloadExecutor
+from anomaly.paths import GENERATED_DIR
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -17,13 +18,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--csv",
         type=str,
-        default="generated_data/ceo_train.csv",
-        help="Ścieżka do pliku CSV (np. generated_data/ceo_train.csv)",
+        default=str(GENERATED_DIR / "ceo_train.csv"),
+        help="Ścieżka do pliku CSV (domyślnie data/generated/ceo_train.csv)",
     )
     parser.add_argument(
         "--all-csv",
         action="store_true",
-        help="Wykonaj po kolei wszystkie pliki: train, validation, test w katalogu generated_data/",
+        help="Wykonaj po kolei wszystkie pliki: train, validation, test z katalogu data/generated/",
     )
     parser.add_argument(
         "--server",
@@ -58,8 +59,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--password",
         type=str,
-        default="CeoPass2026!Secure#",
-        help="Hasło użytkownika SQL Server (domyślnie dla CEO_User: CeoPass2026!Secure#)",
+        default=None,
+        help="Hasło użytkownika SQL Server. Domyślnie pobierane ze zmiennej środowiskowej "
+             "ANOMALY_DB_PASSWORD_<LOGIN> albo z config.local.json (nie podawaj go w kodzie).",
     )
     parser.add_argument(
         "--windows-auth",
@@ -128,7 +130,7 @@ def main():
 
     csv_targets: List[Path] = []
     if args.all_csv:
-        base_dir = Path("generated_data")
+        base_dir = GENERATED_DIR
         csv_targets = [
             base_dir / "ceo_train.csv",
             base_dir / "ceo_validation.csv",

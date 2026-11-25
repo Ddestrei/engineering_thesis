@@ -1,0 +1,9 @@
+{
+  "_opis": "Skopiuj ten plik jako config.local.json i wpisz prawdziwe hasła. config.local.json jest w .gitignore i nie trafia do repozytorium.",
+  "db_passwords": {
+    "CEO_User": "WPISZ_HASLO"
+  },
+  "settings": {
+    "server": "localhost"
+  }
+}

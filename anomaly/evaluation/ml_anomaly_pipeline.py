@@ -6,8 +6,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
 import pandas as pd
-from AnomalyDataLoader import AnomalyDataLoader, FEATURE_NAMES
-from AnomalyDetectionPipeline import AnomalyDetectionPipeline
+from anomaly.features.AnomalyDataLoader import AnomalyDataLoader, FEATURE_NAMES
+from anomaly.models.AnomalyDetectionPipeline import AnomalyDetectionPipeline
+from anomaly.paths import GENERATED_DIR, ML_RESULTS_DIR
 
 
 FEATURE_GROUPS: Dict[str, List[str]] = {
@@ -74,7 +75,7 @@ def main():
     print("CYBERSECURITY ML PIPELINE - DETEKCJA ANOMALII W BAZIE SQL SERVER")
     print("=" * 80)
 
-    base_dirs = [Path("generated_data"), Path(".")]
+    base_dirs = [GENERATED_DIR]
     train_path, val_path, test_path = None, None, None
 
     for d in base_dirs:
@@ -135,7 +136,7 @@ def main():
     abl_summary = ablation_results[["Experiment", "Model", "Feature_Count", "Test_MCC", "Test_PR_AUC", "Test_FPR"]]
     print(abl_summary.to_string(index=False))
 
-    out_dir = Path("results_ml")
+    out_dir = ML_RESULTS_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     baseline_results.to_csv(out_dir / "baseline_test_results.csv", index=False)
     ablation_results.to_csv(out_dir / "ablation_study_results.csv", index=False)

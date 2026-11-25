@@ -1,0 +1,24 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# --- .NET / Visual Studio (LOGGER) ---
+LOGGER/bin/
+LOGGER/obj/
+LOGGER/.vs/
+*.user
+*.suo
+
+# --- Dane i wyniki generowane przez skrypty (odtwarzalne z ziarna) ---
+/data/
+/results/
+*.xel
+
+# --- Ustawienia lokalne z hasłami (wzór: config.example.json) ---
+/config.local.json
+
+# --- Pliki tymczasowe Office ---
+~$*

@@ -1,6 +1,7 @@
 from typing import Optional
 from typing import Dict
-from DBConfig import DBConfig
+from anomaly.execution.DBConfig import DBConfig
+from anomaly.settings import require_db_password
 import pandas as pd
 
 """
@@ -65,8 +66,8 @@ class SessionConnectionManager:
         else:
             if self.cfg.username:
                 parts.append(f"UID={self.cfg.username}")
-            if self.cfg.password:
-                parts.append(f"PWD={self.cfg.password}")
+                password = self.cfg.password or require_db_password(self.cfg.username)
+                parts.append(f"PWD={password}")
 
         if "18" in self._driver or self.cfg.trust_server_certificate:
             parts.append("TrustServerCertificate=yes")

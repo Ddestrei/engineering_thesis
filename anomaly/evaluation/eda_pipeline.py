@@ -17,6 +17,8 @@ from sklearn.preprocessing import RobustScaler, StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
+from anomaly.paths import EDA_PLOTS_DIR, XE_JSON_DIR
+
 warnings.filterwarnings("ignore")
 
 sns.set_theme(style="whitegrid", palette="tab10")
@@ -443,7 +445,7 @@ def plot_dimensionality_reduction(df: pd.DataFrame, output_dir: Optional[Path] =
     plt.close()
 
 
-def run_eda(file_path: Union[str, Path], output_dir: str = "eda_plots"):
+def run_eda(file_path: Union[str, Path], output_dir: Union[str, Path] = EDA_PLOTS_DIR):
     """
     Główna funkcja uruchamiająca pełen rygorystyczny proces EDA.
     """
@@ -484,8 +486,17 @@ def run_eda(file_path: Union[str, Path], output_dir: str = "eda_plots"):
 
 
 if __name__ == "__main__":
-    default_log = Path("LOGI/ml_feature_vectors_20261106_104658.json")
-    if default_log.exists():
-        run_eda(default_log)
+    import sys
+
+    # Ścieżka do JSON-a z LOGGER-a jako argument; domyślnie najnowszy plik z data/xe_json/.
+    if len(sys.argv) > 1:
+        log_path = Path(sys.argv[1])
     else:
-        print(f"Nie odnaleziono pliku {default_log}. Podaj właściwą ścieżkę do run_eda(path).")
+        candidates = sorted(XE_JSON_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime)
+        log_path = candidates[-1] if candidates else None
+
+    if log_path and log_path.exists():
+        run_eda(log_path)
+    else:
+        print(f"Nie odnaleziono pliku JSON z LOGGER-a w {XE_JSON_DIR}. "
+              f"Podaj ścieżkę: python -m anomaly.evaluation.eda_pipeline <plik.json>")

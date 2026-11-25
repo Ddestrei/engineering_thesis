@@ -1,3 +1,7 @@
+-- Hasło przekazywane jako zmienna SQLCMD, nie jest zapisane w pliku:
+--   sqlcmd -S localhost -E -v CEO_PASSWORD="..." -i create_ceo_user.sql
+--   albo w SSMS: menu Query > SQLCMD Mode i na górze :setvar CEO_PASSWORD "..."
+--   albo: python -m anomaly.execution.setup_ceo_user (hasło z config.local.json / zmiennej środowiskowej)
 USE [master];
 GO
 
@@ -5,7 +9,7 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'CEO_User')
 BEGIN
     CREATE LOGIN [CEO_User] 
-    WITH PASSWORD = N'CeoPass2026!Secure#', 
+    WITH PASSWORD = N'$(CEO_PASSWORD)', 
          DEFAULT_DATABASE = [AdventureWorksLT2025],
          CHECK_EXPIRATION = OFF, 
          CHECK_POLICY = OFF;
@@ -14,7 +18,7 @@ END
 ELSE
 BEGIN
     ALTER LOGIN [CEO_User] 
-    WITH PASSWORD = N'CeoPass2026!Secure#', 
+    WITH PASSWORD = N'$(CEO_PASSWORD)', 
          DEFAULT_DATABASE = [AdventureWorksLT2025],
          CHECK_EXPIRATION = OFF, 
          CHECK_POLICY = OFF;

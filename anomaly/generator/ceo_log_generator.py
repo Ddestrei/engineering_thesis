@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, date
 
-from CEOLogGenerator import CEOLogGenerator
+from anomaly.generator.CEOLogGenerator import CEOLogGenerator
+from anomaly.paths import GENERATED_DIR
 
 import pandas as pd
 
@@ -19,7 +20,7 @@ def main():
     """
     import os
 
-    OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "generated_data")
+    OUTPUT_DIR = str(GENERATED_DIR)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     print("=" * 70)

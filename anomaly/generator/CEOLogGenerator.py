@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, date
 from typing import List, Optional, Tuple, Dict
 import numpy as np
 import pandas as pd
-from CEOProfileConfig import CEOProfileConfig
-from AnomalyConfig import AnomalyConfig
+from anomaly.generator.CEOProfileConfig import CEOProfileConfig
+from anomaly.generator.AnomalyConfig import AnomalyConfig
 """
 Główny stochastyczny silnik generujący syntetyczne logi telemetryczne aktywności CEO 
 dla trzech wyizolowanych zbiorów (Train, Validation, Test).
