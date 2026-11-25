@@ -9,7 +9,7 @@ from typing import List
 from anomaly.execution.DBConfig import DBConfig
 from anomaly.execution.ExecutionConfig import ExecutionConfig
 from anomaly.execution.DBWorkloadExecutor import logger, DBWorkloadExecutor
-from anomaly.paths import GENERATED_DIR
+from anomaly.paths import SPLITS, events_csv
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -18,13 +18,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--csv",
         type=str,
-        default=str(GENERATED_DIR / "ceo_train.csv"),
-        help="Ścieżka do pliku CSV (domyślnie data/generated/ceo_train.csv)",
+        default=str(events_csv("train")),
+        help="Ścieżka do pliku zdarzeń z generatora (domyślnie data/generated/events_train.csv)",
     )
     parser.add_argument(
         "--all-csv",
         action="store_true",
-        help="Wykonaj po kolei wszystkie pliki: train, validation, test z katalogu data/generated/",
+        help="Wykonaj po kolei events_train/validation/test.csv z katalogu data/generated/",
     )
     parser.add_argument(
         "--server",
@@ -81,12 +81,6 @@ def parse_args() -> argparse.Namespace:
         help="Maksymalna liczba zapytań do wykonania (do szybkich testów)",
     )
     parser.add_argument(
-        "--tag-normal",
-        type=str,
-        default="NORMAL_TRAFFIC",
-        help="Wartość znacznika ScenarioID dla normalnego ruchu (domyślnie: NORMAL_TRAFFIC)",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Tryb próbny: wypisuje generowane zapytania bez łączenia z bazą danych",
@@ -117,7 +111,6 @@ def main():
 
     exec_cfg = ExecutionConfig(
         delay_sec=args.delay,
-        tag_normal=args.tag_normal,
         dry_run=args.dry_run,
         limit=args.limit,
     )
@@ -130,12 +123,7 @@ def main():
 
     csv_targets: List[Path] = []
     if args.all_csv:
-        base_dir = GENERATED_DIR
-        csv_targets = [
-            base_dir / "ceo_train.csv",
-            base_dir / "ceo_validation.csv",
-            base_dir / "ceo_test.csv",
-        ]
+        csv_targets = [events_csv(split) for split in SPLITS]
     else:
         csv_targets = [Path(args.csv)]
 

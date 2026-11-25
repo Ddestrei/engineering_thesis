@@ -23,7 +23,7 @@ Skutek: MCC na teście wynosi 0,05–0,24, a FPR 31–87%. Plan naprawia te punk
 
 ## 1. Decyzje metodologiczne (ustalić i zamrozić PRZED kodowaniem)
 
-Wszystkie decyzje (D1–D19) są w **[METODOLOGIA.md](METODOLOGIA.md)**. Ten plan się do nich odwołuje i ich nie powtarza, żeby nie było dwóch rozbieżnych wersji. Po starcie eksperymentów na TEST decyzji się nie zmienia (wyjątki tylko przez „Rejestr zmian”).
+Wszystkie decyzje (D1–D20) są w **[METODOLOGIA.md](METODOLOGIA.md)**. Ten plan się do nich odwołuje i ich nie powtarza, żeby nie było dwóch rozbieżnych wersji. Po starcie eksperymentów na TEST decyzji się nie zmienia (wyjątki tylko przez „Rejestr zmian”).
 
 ---
 
@@ -31,7 +31,7 @@ Wszystkie decyzje (D1–D19) są w **[METODOLOGIA.md](METODOLOGIA.md)**. Ten pla
 
 Kolejność wynika z zależności: bez ground truth (Faza 2) nie da się wiarygodnie policzyć metryk, a bez okien (Faza 5) modele nie widzą 3 z 4 klas anomalii.
 
-### Faza 1: Porządki w repozytorium ✅ (zakończona 25.11.2026, bez commita)
+### Faza 1: Porządki w repozytorium ✅ (zakończona 25.11.2026)
 
 - [x] [.gitignore](.gitignore) (`bin/`, `obj/`, `.vs/`, `__pycache__/`, `*.xel`, `/data/`, `/results/`, `config.local.json`); `LOGGER/bin`, `LOGGER/obj`, `LOGGER/.vs` i `__pycache__` usunięte z indeksu gita.
 - [x] Hasło usunięte z kodu. Python pobiera je przez [anomaly/settings.py](anomaly/settings.py) ze zmiennej `ANOMALY_DB_PASSWORD_<LOGIN>` albo z `config.local.json` (wzór: [config.example.json](config.example.json)); [create_ceo_user.sql](sql_files/create_ceo_user.sql) używa zmiennej SQLCMD `$(CEO_PASSWORD)`. **Hasło zostaje w historii gita** (zostało wypchnięte na GitHub), więc trzeba je zmienić na serwerze SQL.
@@ -44,48 +44,62 @@ Kolejność wynika z zależności: bez ground truth (Faza 2) nie da się wiarygo
 
 **Sprawdzone:** 25 modułów się importuje; generator, podgląd wykonania (`--dry-run`), eksperyment ML i EDA działają z nowych ścieżek; LOGGER kompiluje się bez błędów i ostrzeżeń. Nie sprawdzono połączenia z SQL Server (wymaga hasła i działającej instancji).
 
-### Faza 2: Ground truth i korelacja z XE (KRYTYCZNE)
+### Faza 2: Ground truth i korelacja z XE ✅ (zakończona 25.11.2026)
 
 Cel: każde zdarzenie z XE da się w 100% deterministycznie powiązać z wierszem generatora. Etykieta nie trafia do cech.
 
-- [ ] **Generator nadaje identyfikatory**: `RunId` (seed + split), `EventUid` (unikalny na operację), `IncidentId` (dla anomalii; dla normy pusty). Zapisuje dwa pliki:
-  - `events_<split>.csv`: jedna operacja na wiersz, z `EventUid`, czasem symulowanym, użytkownikiem, rolą, urządzeniem, IP, operacją, tabelą,
-  - `incidents_<split>.csv`: `IncidentId`, klasa, intensywność (silna/słaba), użytkownik, start, koniec, severity, liczba zdarzeń.
-- [ ] **W SQL przenosić tylko `EventUid`**, np. komentarz `/* gt:<EventUid> */`. Bez ScenarioID, IsAnomaly, hosta i IP. Logger nie musi znać etykiety, wystarczy klucz.
-- [ ] **Poprawić `APP` w connection stringu** ([SessionConnectionManager.py:52](anomaly/execution/SessionConnectionManager.py#L52)). Średniki ucinają nazwę aplikacji, więc wpisywać np. `APP=SIM|run=...|dev=Office_PC` bez `;`. Etykiet nie przekazywać tędy.
-- [ ] **LOGGER** ([XeLogReader.cs](LOGGER/XeLogReader.cs)):
-  - wyciągać `EventUid` z komentarza, a `SqlText` zapisywać **po usunięciu komentarza** (inaczej `SqlTextLength` zdradza etykietę),
-  - usunąć `DetermineAnomaly` i całą logikę etykiet z C#; logger eksportuje tylko fakty z XE + `EventUid`,
-  - nie eksportować zdarzeń `error_reported` jako rekordów danych. Generator tworzy tylko legalne operacje, więc każdy błąd SQL oznacza błąd w symulacji: logger ma go zgłosić, a skrypt walidacyjny ma przerwać przebieg (dziś błąd daje dodatkowy rekord: 383 zdarzenia zamiast 372),
-  - `OperationType` wyznaczać po pominięciu komentarzy i białych znaków,
-  - `DayOfWeek` w konwencji ISO (0 = poniedziałek), tak jak w pandas.
-- [ ] **Join w Pythonie**: `xe_events ⋈ events_<split>.csv` po `EventUid`. Skrypt walidacyjny raportuje pokrycie i przerywa przebieg, jeśli choć jedno zdarzenie generatora nie ma rekordu XE albo choć jeden rekord XE nie ma pary w generatorze (wymagane 100%, D11).
-- [ ] Udokumentować, że czas jest **symulowany** (`SimTime`), a metryki wykonania (duration, reads, rows) są **realne** z XE. To ograniczenie trzeba opisać w pracy.
+**Przyjęty podział** (decyzja z 25.11): z logów XE pochodzą wszystkie fakty obserwowalne (metryki wykonania, tekst SQL, host, urządzenie, IP); z generatora wyłącznie **czas symulowany i etykiety** (kolumny `gt_*`).
 
-**Gotowe, gdy:** raport pokrycia joinu = 100%, a w JSON-ie z loggera nie ma ani jednego pola pochodzącego z etykiety.
+- [x] **Generator nadaje identyfikatory** ([CEOLogGenerator.py](anomaly/generator/CEOLogGenerator.py)): `run_id` (`<split>-s<seed>`), `event_uid` (`<run_id>-<nr>`), `incident_id`. Zapisuje `data/generated/events_<split>.csv` i `incidents_<split>.csv`. Kolumna `intensity` jest na razie pusta (wypełni ją Faza 3, D15).
+- [x] **W SQL tylko `EventUid`**: komentarz `/* gt:<EventUid> */` ([gt_tag.py](anomaly/execution/gt_tag.py)), bez etykiet, hosta, IP i czasu.
+- [x] **`APP` w connection stringu** ([SessionConnectionManager.py](anomaly/execution/SessionConnectionManager.py)): `SIM|run:<run_id>|dev:<urządzenie>|ip:<ip>`, bez `;` i `=`, bez etykiet. Host w `WSID`.
+- [x] **LOGGER** przepisany ([XeLogReader.cs](LOGGER/XeLogReader.cs), [XeEventRecord.cs](LOGGER/XeEventRecord.cs), [JsonExporter.cs](LOGGER/JsonExporter.cs)); usunięte `AnomalyFeatureRecord.cs` i `MLFeatureExporter.cs`:
+  - eksportuje surowe fakty z XE + `EventUid` (format `xe-export/v2`), **bez etykiet i bez wektora cech**. Cechy liczy Python per okno (Faza 5); punkt „`DayOfWeek` w konwencji ISO w LOGGER-ze” stał się zbędny, bo czas symulowany jest znany dopiero po połączeniu,
+  - `SqlText` i `SqlTextLength` po wycięciu znacznika,
+  - `error_reported` w osobnej liście `errors`, nie jako dane,
+  - `OperationType` po pominięciu komentarzy; lista wszystkich tabel `SalesLT.*` w zapytaniu,
+  - domyślnie czyta wszystkie pliki rollover `C:\XELogs\AW2025_Behavioral_Anomaly*.xel`.
+- [x] **Połączenie i walidacja** ([xe_join.py](anomaly/features/xe_join.py)): odrzuca przebieg przy błędzie SQL, duplikacie, brakującym zdarzeniu, sierocie, wyniku ≠ OK albo niezgodnym kontekście (run, urządzenie, IP, host, login, typ operacji). Zdarzenia innych przebiegów są pomijane. Wynik: `data/joined/joined_<split>.csv` + `join_report.json`.
+- [x] Czas symulowany (`sim_timestamp`) vs fizyczny (`physical_timestamp`) rozdzielone w danych; ograniczenie opisane w METODOLOGIA (D11, sekcja E).
+- [x] Poza zakresem fazy, ale blokowało walidację: anomalie „nietypowa pora” i „wzrost wolumenu” losowały tabelę INSERT-a z wag SELECT, więc 22 operacje łamały uprawnienia. Poprawione.
+- [x] Testy: [tests/test_ground_truth.py](tests/test_ground_truth.py) (15 testów, `python -m pytest`).
 
-### Faza 3: Generator: wiele ról, wielu użytkowników, poprawna norma
+**Sprawdzone na bazie (25.11.2026):** 664 zapytania (3 zbiory) wykonane jako `CEO_User` bez błędów; LOGGER: 664 zdarzenia ze znacznikiem, 0 błędów; walidacja: **pokrycie 100%**, wszystkie 11 kontroli OK. Długość SQL nie zależy już od etykiety (INSERT Customer: średnio 333,1 dla normy i 333,0 dla anomalii; wcześniej komentarz z etykietą różnicował ją o setki znaków).
 
-- [ ] **Profile ról jako dane** (`profiles/*.json` lub dataclassy): 6 ról z dokumentu „Poprawiony schemat użycia” (CEO, CFO, Marketing Manager, Marketing, Sales Manager, Sales). Każdy profil określa dni, godziny, urządzenia, rozkład wolumenu, proporcje SELECT/INSERT/UPDATE/DELETE i rozkład tabel **w granicach uprawnień**.
-- [ ] **Użytkownicy w roli**: 5 na rolę, z perturbacją parametrów roli dokładnie według D15. Dopiero to daje sens porównaniu global / per rola / per użytkownik.
-- [ ] **Ziarna**: pod-ziarna dla profili użytkowników, TRAIN, VAL i TEST z `SeedSequence(seed).spawn(4)` (D6). [SQLQueryBuilder.py](anomaly/execution/SQLQueryBuilder.py) przestaje używać globalnego `random` i dostaje własny generator z ziarnem przebiegu.
-- [ ] **Naprawić błędy**:
-  - normalny ruch w weekend: [`_resolve_day_in_week`](anomaly/generator/CEOLogGenerator.py#L463-L475) losuje dowolny dzień, gdy w niepełnym tygodniu brakuje docelowego. Tydzień trzeba wyrównać do poniedziałku, a sesję bez pasującego dnia pominąć (lub przenieść do następnego tygodnia),
-  - niepełny tydzień na końcu miesiąca dostaje pełny tygodniowy wolumen, co daje sztuczny skok aktywności na koniec każdego miesiąca. Wolumen trzeba liczyć proporcjonalnie do liczby dni roboczych w tygodniu,
-  - odstępy w sesji: [CEOLogGenerator.py:172](anomaly/generator/CEOLogGenerator.py#L172) używa `gap * op_idx` z nowym losowaniem; trzeba sumować kolejne odstępy,
-  - ~~INSERT do Product/SalesOrderHeader w normie CEO~~ (**zrobione 25.11**: INSERT tylko do `Customer`, SELECT 85–95%, wolumen 14–48 w [CEOProfileConfig.py](anomaly/generator/CEOProfileConfig.py)),
-  - pozostała spójność profilu CEO z dokumentem: okno biurowe wt–czw 10–15 (dziś 9–16 ze spillover na pon/pt), nazwy hostów.
-- [ ] **DELETE i UPDATE a klucze obce**: usuwać i modyfikować wyłącznie rekordy wstawione wcześniej w tym samym przebiegu symulacji i bez powiązań (klient bez zamówień i adresów, produkt bez pozycji zamówień, model bez produktów). Dla CFO kolejność: najpierw `SalesOrderDetail`, potem `SalesOrderHeader`. Generator musi więc śledzić, jakie rekordy symulacyjne istnieją w danej chwili. Bez tego DELETE kończy się błędem SQL, a według D3 każdy błąd przerywa przebieg.
-- [ ] **Sekwencje DELETE z profili**: Marketing Manager usuwa szkice w tej samej sesji co INSERT; Sales usuwa stare powiązanie CustomerAddress przy zmianie adresu; Sales Manager usuwa 1–2 duplikaty Customer w miesiącu, w ostatnim tygodniu, po kilku SELECT-ach.
-- [ ] **Liczba incydentów** według D18 (3 na klasę, rolę i miesiąc w VAL), **severity** według wzoru D19, a nie losowo (dziś `_random_severity`).
-- [ ] **Rzadki zasób naprawdę rzadki**: dla każdego użytkownika wyznaczyć tabele dozwolone, ale o niskiej częstości w jego normie (np. < 3%). Anomalia = seria dostępów do takiej tabeli. Dziś „rzadki” Product to ~15% normalnych SELECT-ów CEO.
-- [ ] **Anomalie zdefiniowane względem użytkownika**, nie stałych liczb (np. spike jako wielokrotność mediany operacji w oknie danego użytkownika; nietypowa pora względem jego typowego okna pracy). Zakresy według D15/D16.
-- [ ] **Trudne przypadki legalne** (etykieta: norma, tag `HARD_NORMAL_*` do analizy błędów): lista, role i częstości według tabeli w D15. Występują we wszystkich zbiorach, także w TRAIN.
-- [ ] **Intensywność anomalii**: 50% silnych, 50% słabych, nakładających się na normę (D15). Poziom zapisywany w `incidents_<split>.csv`.
-- [ ] **Test generalizacji**: zmiany TEST względem VAL dokładnie według tabeli D16.
-- [ ] **Testy jednostkowe generatora** (pytest): brak normy w weekend dla ról bez weekendów, wszystkie normalne operacje zgodne z uprawnieniami, deterministyczność dla tego samego seeda, rozkład wolumenu w zadanych granicach.
+**Znane ograniczenia przejściowe:**
+- eksperyment ML (`ml_anomaly_pipeline`) nadal czyta pliki generatora, a nie `data/joined/`; zmienia to Faza 5,
+- `eda_pipeline` czyta tylko stary format JSON (archiwum); przepisanie w Fazie 9,
+- health-check `SELECT 1` nadal generuje zdarzenia XE bez znacznika (LOGGER je pomija); usunięcie w Fazie 4,
+- `cleanup_simulation_data` nie działa (Faza 4). W tabeli Customer jest 849 rekordów symulacyjnych.
 
-**Gotowe, gdy:** testy przechodzą, a krótki raport rozkładów (per rola) zgadza się z opisem profili w dokumencie.
+### Faza 3: Generator: wiele ról, wielu użytkowników, poprawna norma ✅ (zakończona 25.11.2026)
+
+Nowy generator w [anomaly/generator/](anomaly/generator/) zastąpił stary generator tylko dla CEO (usunięte: `CEOLogGenerator.py`, `CEOProfileConfig.py`, `AnomalyConfig.py`, `ceo_log_generator.py`). Uruchomienie: `python -m anomaly.generator.generate --seed 11`.
+
+| Moduł | Zawartość |
+|---|---|
+| [domain.py](anomaly/domain.py) | uprawnienia 6 ról 1:1 z dokumentu, wrażliwość tabel (D10) |
+| [profiles.py](anomaly/generator/profiles.py) | profile ról: urządzenia, dni, godziny, wolumen, proporcje, tryb końca miesiąca CFO, trudne przypadki |
+| [users.py](anomaly/generator/users.py) | 5 użytkowników na rolę, perturbacja D15, rzadkie tabele, zaburzenie testu D16 |
+| [normal_activity.py](anomaly/generator/normal_activity.py) | norma, tygodnie od poniedziałku, sekwencje z profili, trudne przypadki z tagami `HARD_NORMAL_*` |
+| [incidents.py](anomaly/generator/incidents.py) | 4 klasy × silna/słaba, warianty VAL/TEST (D16), liczba (D18), severity (D19) |
+| [records.py](anomaly/generator/records.py) | `record_key` / `parent_keys` i rekordy startowe (D20) |
+| [dataset.py](anomaly/generator/dataset.py), [generate.py](anomaly/generator/generate.py), [report.py](anomaly/generator/report.py) | ziarna (D6), okresy (D5), zapis plików, raport zgodności |
+
+- [x] Profile 6 ról jako dane, w granicach uprawnień (asercja przy tworzeniu profilu).
+- [x] 5 użytkowników na rolę z perturbacją D15 (środek okna ±1 h, granice z dokumentu zostają).
+- [x] Ziarna: `SeedSequence(seed).spawn(4)`; `SQLQueryBuilder` bez globalnego `random` (treść zapytania zależy tylko od `event_uid`).
+- [x] Błędy naprawione: tygodnie od poniedziałku (koniec z normą w weekend), wolumen niepełnego tygodnia proporcjonalny do dni roboczych, kumulowane odstępy w sesji, CEO w biurze tylko wt–czw 10–15.
+- [x] UPDATE/DELETE bez błędów kluczy obcych: pula rekordów startowych (D20) zamiast śledzenia stanu bazy.
+- [x] Sekwencje z profili: szkic → usunięcie (Marketing Manager), zmiana adresu (Sales), porządkowanie duplikatów 1–2×/mies. (Sales Manager).
+- [x] Liczba incydentów D18, severity D19, intensywność 50/50 (D15), warianty VAL/TEST (D16).
+- [x] Rzadki zasób rzadki per użytkownik (1–3% odczytów, tylko tabele wyłącznie odczytywane).
+- [x] Trudne przypadki legalne D15 we wszystkich zbiorach, także w TRAIN.
+- [x] Testy: [tests/test_generator.py](tests/test_generator.py) (14 testów) + przepięte [tests/test_ground_truth.py](tests/test_ground_truth.py); razem 30 testów.
+
+**Sprawdzone (ziarno 11):** 0 operacji niezgodnych z uprawnieniami; wolumen tygodniowy (P10–P90) i udziały operacji wszystkich ról w przedziałach z dokumentu (np. CFO: SELECT 24,7% w miesiącu i 79,9% na koniec miesiąca, UPDATE:DELETE = 40:60); CEO: biuro 73%, dom 14%, laptop 14%; VAL 72 incydenty (3 na klasę i rolę), TEST 70–82 zależnie od ziarna. Udział okien anomalnych: VAL 9,5–10%, TEST 10,6–13% (D18, raportowany). Raport: `data/generated/generator_report.txt`.
+
+**Do Fazy 4 z tej fazy:** wykonawca musi obsłużyć nowy format (30 loginów `SIM_<ROLA>_<nr>`, `record_key` → `rowguid`, `parent_keys`, rekordy startowe). Do tego czasu `db_workload_executor` w trybie `--dry-run` działa, ale nie zna SQL dla nowych tabel ani UPDATE/DELETE.
 
 ### Faza 4: SQL Server i wykonanie obciążenia
 
@@ -96,6 +110,10 @@ Cel: każde zdarzenie z XE da się w 100% deterministycznie powiązać z wiersze
 - [ ] Usunąć health-check `SELECT 1` przy każdym zapytaniu ([SessionConnectionManager.py:93](anomaly/execution/SessionConnectionManager.py#L93)), bo generuje zbędne zdarzenia.
 - [ ] Sesja XE: dodać `sql_statement_completed` lub pozostać przy batchach (udokumentować wybór). Każdy przebieg zapisywać do osobnego pliku `.xel` (`<RunId>.xel`).
 - [ ] **Jeden skrypt orkiestrujący** `run_experiment.py --seed N`: restore bazy → generator → wykonanie → odczekanie na flush XE → LOGGER → join → cechy. Wszystkie seedy przechodzą tę samą ścieżkę.
+
+- [ ] **Format z Fazy 3** (D20): wykonawca czyta `record_key` i `parent_keys` z `events_<split>.csv`; klucz zamienia na deterministyczny `rowguid` (np. `uuid5(namespace, record_key)`), a UPDATE/DELETE i odwołania do rodziców robi po `rowguid` (każda tabela SalesLT ma unikalną kolumnę `rowguid`). Rodzic z `SalesOrderHeader` w INSERT pozycji przez podzapytanie po `rowguid`.
+- [ ] **Rekordy startowe:** przed każdym przebiegiem (po restore z `.bak`) wstawić `seed_records_<split>.csv` jako administrator, w kolejności rodzice → dzieci, z `rowguid` z klucza. Bez znacznika gt, więc LOGGER je pomija.
+- [ ] **30 loginów** `SIM_<ROLA>_<nr>` (lista w `data/generated/users.csv`), przypisanych do ról bazodanowych; hasła przez `config.local.json` / zmienne środowiskowe (Faza 1).
 
 **Gotowe, gdy:** jeden seed przechodzi cały łańcuch bez ręcznych kroków, a pokrycie joinu = 100%.
 
@@ -195,9 +213,9 @@ Obecnie w repozytorium nie ma projektu WPF.
 |---|---|---|
 | ML nie używa danych z XE, metryki są losowane w Pythonie | `AnomalyDataLoader.py` | 5 |
 | Cechy per zdarzenie nie widzą wolumenu, proporcji ani rzadkości | cały pipeline | 5 |
-| Normalny ruch w weekend | `CEOLogGenerator._resolve_day_in_week` | 3 |
-| Niekumulatywne odstępy w sesji | `CEOLogGenerator.py:172` | 3 |
-| „Rzadki zasób” nie jest rzadki (Product ~15% SELECT-ów) | `AnomalyConfig.py` | 3 |
+| Normalny ruch w weekend | `CEOLogGenerator._resolve_day_in_week` (usunięty) | 3 ✅ |
+| Niekumulatywne odstępy w sesji | `CEOLogGenerator.py` (usunięty) | 3 ✅ |
+| „Rzadki zasób” nie jest rzadki (Product ~15% SELECT-ów) | `AnomalyConfig.py` (usunięty) | 3 ✅ |
 | `IsError` zawsze 0 (warunek `severity_level >= 11` na skali 1–5); cecha do usunięcia (D3) | `AnomalyDataLoader.py:90` | 5 |
 | `DayOfWeek`: C# 0=niedziela, pandas 0=poniedziałek | `MLFeatureExporter.cs`, loader | 2 |
 | `SqlTextLength` zawiera komentarz z etykietą | `XeLogReader.cs` | 2 |

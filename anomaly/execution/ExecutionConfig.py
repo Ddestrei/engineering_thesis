@@ -6,7 +6,6 @@ from typing import Optional
 @dataclass
 class ExecutionConfig:
     delay_sec: float = 0.05
-    tag_normal: str = "NORMAL_TRAFFIC"
     dry_run: bool = False
     limit: Optional[int] = None
     cleanup: bool = False

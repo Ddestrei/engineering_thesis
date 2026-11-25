@@ -43,7 +43,8 @@ class DBWorkloadExecutor:
 
         # Sprawdzenie wymaganych kolumn
         required_cols = [
-            "operation_type", "target_table", "device_context", "session_id"
+            "event_uid", "run_id", "operation_type", "target_table",
+            "device_context", "client_hostname", "simulated_ip", "session_id",
         ]
         missing = [c for c in required_cols if c not in df.columns]
         if missing:
@@ -68,29 +69,23 @@ class DBWorkloadExecutor:
         logger.info(f"Rozpoczynanie egzekucji {len(df)} operacji bazodanowych...")
 
         for idx, row in df.iterrows():
+            event_uid = str(row["event_uid"])
+            run_id = str(row["run_id"])
             op_type = str(row["operation_type"])
             table = str(row["target_table"])
             device = str(row["device_context"])
-            hostname = str(row["client_hostname"]) if "client_hostname" in row and pd.notna(row["client_hostname"]) else device
-            simulated_ip = str(row["simulated_ip"]) if "simulated_ip" in row and pd.notna(row["simulated_ip"]) else "10.0.4.15"
-            login_user = str(row["login_name"]) if "login_name" in row and pd.notna(row["login_name"]) else str(row.get("user", "CEO_User"))
+            hostname = str(row["client_hostname"])
+            simulated_ip = str(row["simulated_ip"])
             session_id = str(row["session_id"])
-            scenario_id = str(row["scenario_id"]) if pd.notna(row.get("scenario_id")) else ""
-            is_anomaly = int(row["is_anomaly"]) if "is_anomaly" in row and pd.notna(row["is_anomaly"]) else 0
-            sim_timestamp = str(row["timestamp"]) if "timestamp" in row and pd.notna(row["timestamp"]) else None
 
-            if is_anomaly == 1:
+            # Etykieta służy tu tylko do statystyki wykonania; do bazy trafia wyłącznie event_uid.
+            if "is_anomaly" in row and pd.notna(row["is_anomaly"]) and int(row["is_anomaly"]) == 1:
                 stats["anomalies"] += 1
 
             sql_query = self.query_builder.build_query(
                 operation_type=op_type,
                 target_table=table,
-                scenario_id=scenario_id,
-                tag_normal=self.exec_cfg.tag_normal,
-                user_name=login_user,
-                client_hostname=hostname,
-                simulated_ip=simulated_ip,
-                simulated_timestamp=sim_timestamp,
+                event_uid=event_uid,
             )
 
             if op_type.upper() == "SELECT":
@@ -100,7 +95,8 @@ class DBWorkloadExecutor:
 
             if self.exec_cfg.dry_run:
                 if idx < 5 or idx % 50 == 0:
-                    logger.info(f"[DRY-RUN #{idx+1}] Host:{hostname} (IP:{simulated_ip}) | {sql_query}")
+                    app = self.conn_mgr.make_app_name(run_id, device, simulated_ip)
+                    logger.info(f"[DRY-RUN #{idx+1}] WSID={hostname} APP={app} | {sql_query}")
                 stats["executed"] += 1
                 continue
 
@@ -110,9 +106,7 @@ class DBWorkloadExecutor:
                     client_hostname=hostname,
                     device_context=device,
                     simulated_ip=simulated_ip,
-                    user_name=login_user,
-                    scenario_id=scenario_id,
-                    is_anomaly=is_anomaly,
+                    run_id=run_id,
                 )
                 cursor = conn.cursor()
                 cursor.execute(sql_query)
@@ -126,8 +120,11 @@ class DBWorkloadExecutor:
                 stats["executed"] += 1
 
             except Exception as ex:
+                # Generator tworzy wyłącznie operacje zgodne z uprawnieniami (METODOLOGIA D3),
+                # więc każdy błąd SQL to błąd symulacji. Walidacja (xe_join) przerwie przebieg.
                 stats["errors"] += 1
-                logger.debug(f"[SQL INFO/WARN #{idx+1}] Zapytanie: {sql_query} | Info: {ex}")
+                if stats["errors"] <= 10:
+                    logger.warning(f"[BŁĄD SQL] {event_uid}: {ex}")
 
             if idx > 0 and (idx + 1) % 50 == 0:
                 logger.info(f"Postęp: {idx+1}/{len(df)} zapytań wykonanych.")

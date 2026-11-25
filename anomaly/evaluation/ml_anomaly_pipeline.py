@@ -8,7 +8,7 @@ from typing import Dict, List
 import pandas as pd
 from anomaly.features.AnomalyDataLoader import AnomalyDataLoader, FEATURE_NAMES
 from anomaly.models.AnomalyDetectionPipeline import AnomalyDetectionPipeline
-from anomaly.paths import GENERATED_DIR, ML_RESULTS_DIR
+from anomaly.paths import ML_RESULTS_DIR, events_csv
 
 
 FEATURE_GROUPS: Dict[str, List[str]] = {
@@ -75,20 +75,14 @@ def main():
     print("CYBERSECURITY ML PIPELINE - DETEKCJA ANOMALII W BAZIE SQL SERVER")
     print("=" * 80)
 
-    base_dirs = [GENERATED_DIR]
-    train_path, val_path, test_path = None, None, None
-
-    for d in base_dirs:
-        candidate_train = d / "vectorized_ceo_train.csv" if (d / "vectorized_ceo_train.csv").exists() else d / "ceo_train.csv"
-        candidate_val = d / "vectorized_ceo_validation.csv" if (d / "vectorized_ceo_validation.csv").exists() else d / "ceo_validation.csv"
-        candidate_test = d / "vectorized_ceo_test.csv" if (d / "vectorized_ceo_test.csv").exists() else d / "ceo_test.csv"
-
-        if candidate_train.exists() and candidate_val.exists() and candidate_test.exists():
-            train_path, val_path, test_path = candidate_train, candidate_val, candidate_test
-            break
-
-    if not train_path:
-        raise FileNotFoundError("Nie odnaleziono zbiorów ceo_train.csv, ceo_validation.csv, ceo_test.csv.")
+    # UWAGA (stan przejściowy do Fazy 5): eksperyment czyta jeszcze pliki generatora,
+    # a nie zdarzenia z Extended Events (data/joined/). Zmienia to Faza 5 planu.
+    train_path, val_path, test_path = (events_csv(s) for s in ("train", "validation", "test"))
+    missing = [p for p in (train_path, val_path, test_path) if not p.exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"Brak plików: {[str(p) for p in missing]}. Uruchom: python -m anomaly.generator.generate --seed 11"
+        )
 
     print(f"[+] Zbiór Treningowy:  {train_path}")
     print(f"[+] Zbiór Walidacyjny: {val_path}")

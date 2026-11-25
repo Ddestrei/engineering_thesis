@@ -114,6 +114,7 @@ Wagi ustalone a priori i niezmieniane po obejrzeniu wyników TEST. Składniki po
 - Okna wyrównane do pełnych półgodzin (hh:00–hh:30, hh:30–hh+1:00), przedział lewostronnie domknięty.
 - Czas to **czas symulowany** (`SimTime` z generatora), naiwny (bez strefy czasowej), interpretowany jako czas lokalny firmy. Metryki wykonania (duration, reads, rows) są **rzeczywiste** z Extended Events.
 - Zdarzenia przypisywane są do okien po joinie z ground truth po `EventUid`. Zdarzenie XE bez pary w generatorze przerywa przebieg (wymagane pokrycie 100%).
+- **Źródło danych w tabeli połączonej:** z Extended Events pochodzą wszystkie fakty obserwowalne: metryki wykonania, tekst SQL (bez znacznika), login, host (`WSID`), typ urządzenia i IP (nazwa aplikacji klienta). Z generatora pochodzą wyłącznie czas symulowany i etykiety (kolumny `gt_*`), które służą tylko do oceny. Do SQL Server trafia jedynie `EventUid`; etykieta nigdy nie przechodzi przez bazę.
 
 ### D12. Baseline statystyczny (robust)
 - Dla każdej cechy ciągłej i każdej jednostki modelowania (D17) z okien TRAIN liczone są mediana *m* i skala `s = 1,4826 · MAD`.
@@ -154,21 +155,24 @@ Wagi ustalone a priori i niezmieniane po obejrzeniu wyników TEST. Składniki po
 
 ### D15. Profile, użytkownicy i trudne przypadki legalne
 - **Rozstrzygnięcie sprzeczności w profilu CEO:** udział SELECT wynosi **85–95%**, a INSERT (wyłącznie do `Customer`) **5–15%** operacji tygodniowo. Zgadza się to z opisem „dodawanie rekordów skrajnie rzadkie” i „aktywność to głównie raporty zarządcze”. Zapis „30–60% INSERT” w profilu był błędny. Wolumen tygodniowy: 14–48 operacji.
-- **Perturbacja użytkownika w roli:** wolumen tygodniowy ×U(0,85; 1,15), środek okna godzinowego ±U(0; 1) h, wagi tabel mnożone przez U(0,7; 1,3) i renormalizowane, udział urządzeń ±5 pp.
+- **Perturbacja użytkownika w roli:** wolumen tygodniowy ×U(0,85; 1,15), środek okna godzinowego ±U(0; 1) h (granice okna z dokumentu pozostają, np. CFO nie zaczyna sesji regularnych po 17:00), wagi tabel mnożone przez U(0,7; 1,3) i renormalizowane, udział urządzeń ±5 pp.
+- **Rzadko używane tabele (zasób dla klasy „rzadki zasób”):** każdy użytkownik ma 1 (role z ≤ 3 tabelami do odczytu) albo 2 takie tabele, wybierane spośród tabel, które rola **wyłącznie odczytuje** (żeby zapis nie podnosił ich częstości). Ich waga to 1–3% odczytów danego użytkownika. Rzadkość jest więc cechą użytkownika, nie roli (ważne dla H1).
 - **Trudne przypadki legalne** (etykieta: norma, tag `HARD_NORMAL_*` tylko do analizy błędów). Występują we **wszystkich** zbiorach, także w TRAIN:
 
   | Przypadek | Role | Częstość |
   |---|---|---|
   | koniec miesiąca: skok wolumenu i zmiana proporcji | CFO | ostatnie 3–5 dni roboczych każdego miesiąca (z profilu) |
-  | praca po godzinach (17–20) | Sales, Sales Manager, Marketing, Marketing Manager | ~3% sesji |
+  | praca po godzinach: 17–20 (Marketing Manager, na komputerze prywatnym) oraz 17–20 lub 7–9 (Sales, Sales Manager, Marketing) | jak obok | ~3% sesji |
   | aktywność weekendowa | Sales, Sales Manager, Marketing | ~1% sesji |
-  | rzadki legalny dostęp do tabeli | wszystkie | ~2% operacji (tabela o wadze < 3%) |
-  | skok SELECT bez incydentu (przygotowanie raportu) | wszystkie | ~1 sesja na miesiąc, ×2–3 mediany wolumenu |
+  | rzadki legalny dostęp do tabeli | wszystkie | 1–3% odczytów użytkownika (rzadko używane tabele, patrz wyżej) |
+  | skok SELECT bez incydentu (przygotowanie raportu) | wszystkie | 1 sesja na miesiąc, ×2–3 mediany operacji **na okno 30 min** przez 1 h (ok. 10% operacji TRAIN) |
+  | koniec miesiąca CFO: po 17:00 na komputerze prywatnym | CFO | 30% sesji w ostatnich 3–5 dniach roboczych |
   | alternatywne IP/urządzenie | Sales, Sales Manager, Marketing | ~2% sesji |
 
 - **Intensywność anomalii:** każda anomalia ma poziom zapisany w `incidents.csv`:
-  - **silna** (wyraźnie poza normą, np. spike ×4–6 mediany, godziny 1–5),
-  - **słaba** (rozkłady nakładają się na normę, np. spike ×1,5–2,5, godzina tuż za oknem pracy).
+  - **silna** (wyraźnie poza normą, np. wzrost wolumenu ×4–6 mediany na okno, godziny 1–5),
+  - **słaba** (rozkłady nakładają się na normę, np. wzrost ×1,5–2,5, godzina tuż za oknem pracy).
+  Szczegóły per klasa w D16. Mediana operacji na okno użytkownika jest przybliżana oczekiwaną długością sesji (λ + 1).
 
   Proporcja 50/50.
 
@@ -181,9 +185,9 @@ Wagi ustalone a priori i niezmieniane po obejrzeniu wyników TEST. Składniki po
 | parametry normy | profil bazowy | profil z perturbacją ±10% (wolumen, proporcje, długość sesji) |
 | nietypowa pora, silna | godziny 1–5 lub weekend | godziny 22–24 lub 5–7 lub weekend |
 | nietypowa pora, słaba | 1–2 h **po** końcu typowego okna pracy użytkownika | 1–2 h **przed** początkiem typowego okna pracy użytkownika |
-| wzrost wolumenu | silna ×4–6, słaba ×1,5–2,5 mediany, w ciągu 1 h | te same zakresy intensywności, rozłożone na 2–3 h |
-| nietypowa proporcja | przesunięcie w stronę **najrzadszego** w normie użytkownika typu operacji, do którego rola ma uprawnienia | przesunięcie w stronę **innego** dozwolonego typu niż na VAL (np. SELECT, jeśli na VAL był zapis); tylko typy z uprawnień roli (CFO nie ma INSERT, Marketing nie ma DELETE, CEO ma tylko SELECT/INSERT) |
-| rzadki zasób | losowe tabele rzadkie, zbiór A | inne tabele rzadkie, zbiór B (rozłączny z A, jeśli rola ma ich dość) |
+| wzrost wolumenu | tempo: silna ×4–6, słaba ×1,5–2,5 mediany operacji **na okno 30 min**, przez 1 h (2 okna) | to samo tempo, przez 1,5–2 h (3–4 okna) |
+| nietypowa proporcja (8–16 operacji w 1 h; udział typu docelowego: silna 85–98%, słaba 50–70%) | przesunięcie w stronę **najrzadszego** w normie użytkownika typu operacji, do którego rola ma uprawnienia (brane są tylko typy o udziale < 50% w normie) | przesunięcie w stronę **innego** dozwolonego typu niż na VAL (np. SELECT, jeśli na VAL był zapis); tylko typy z uprawnień roli (CFO nie ma INSERT, Marketing nie ma DELETE, CEO ma tylko SELECT/INSERT) |
+| rzadki zasób (silna: 8–18 odczytów rzadkiej tabeli w 1 h; słaba: 2–4 odczyty wplecione w zwykłą sesję, do incydentu należą tylko one) | pierwsza rzadka tabela użytkownika | druga rzadka tabela użytkownika (jeśli ma tylko jedną: ta sama) |
 | liczba incydentów | według D18 | według D18, ±1 na klasę i rolę |
 
 **Uzasadnienie:** detektor ma wykrywać *schemat* anomalii, a nie konkretne wartości z VAL, na których stroiliśmy progi.
@@ -202,6 +206,7 @@ Wagi ustalone a priori i niezmieniane po obejrzeniu wyników TEST. Składniki po
 - W VAL: **3 incydenty każdej klasy na rolę na miesiąc**, przypisane losowo do użytkowników tej roli. Daje to 6 ról × 4 klasy × 3 = **72 incydenty** na przebieg, po połowie silnych i słabych (D15).
 - W TEST: liczba według D16 (±1 na klasę i rolę).
 - Docelowy udział okien anomalnych: **5–10%** wszystkich okien VAL i TEST. Rzeczywisty udział jest raportowany przy wynikach, bo od niego zależy bazowy poziom Precision i PR-AUC (losowy klasyfikator ma PR-AUC równe temu udziałowi).
+- **Zmierzone na generatorze (25.11.2026, ziarna 11–55):** VAL 9,5–10,0%, TEST 10,6–13,0%. TEST jest powyżej celu, bo incydent obejmuje 2–4 okna, a liczba incydentów w TEST losowo rośnie (±1 na klasę i rolę). Generatora nie dostrajano pod ten cel; rzeczywisty udział jest raportowany per ziarno.
 
 **Uzasadnienie:** bez ustalonej liczby incydentów Precision i PR-AUC nie są porównywalne między VAL, TEST i przebiegami. 3 incydenty na klasę i rolę dają około 18 incydentów każdej klasy na przebieg, a po 5 ziarnach około 90, co wystarcza do metryk per klasa.
 
@@ -222,6 +227,16 @@ Severity (1–5) **nie jest losowana**. Wyznacza się ją deterministycznie z ce
 **Uzasadnienie:** obecny generator losuje severity niezależnie od przebiegu incydentu. Przy takiej etykiecie żaden scoring nie może poprawić NDCG@K, więc H5 byłaby nietestowalna. Severity odpowiada wpływowi incydentu, czyli temu, jakich danych dotyczył i jak bardzo odbiegał od normy.
 
 **Ograniczenie:** RiskScore (D10) korzysta z tej samej tabeli wrażliwości. Część przewagi RiskScore w H5 wynika więc z tego, że oba opisują ten sam czynnik wpływu. Trzeba to uczciwie opisać w pracy. Właściwym testem H5 jest to, czy RiskScore porządkuje alerty lepiej niż **sam** anomaly score i niż chronologia, a nie jego wartość bezwzględna.
+
+### D20. Rekordy dla operacji zapisu (decyzja z 25.11.2026)
+- **INSERT** tworzy nowy rekord symulacyjny. Rekord zależny odwołuje się do rodzica wstawionego wcześniej **w tej samej sesji**, jeśli istnieje (zamówienie, potem pozycje; nowy adres, potem powiązanie z klientem; nowy opis, potem powiązanie z modelem). W przeciwnym razie odwołuje się do rekordu z puli aktualizacji.
+- **UPDATE** trafia w rekord z **puli aktualizacji** danej tabeli (do 20 rekordów startowych na tabelę i przebieg, nigdy nieusuwanych).
+- **DELETE** trafia w **świeży rekord startowy bez rekordów zależnych**, użyty tylko raz. Wyjątek z profilu Marketing Managera: usunięcie szkicu wstawionego wcześniej w tej samej sesji.
+- **Rekordy startowe** (`seed_records_<split>.csv`) wstawia wykonawca jako administrator przed przebiegiem (Faza 4). Nie niosą znacznika gt, więc nie trafiają do danych eksperymentu.
+
+**Uzasadnienie:** wolumen DELETE (np. CFO około 90 tygodniowo na 5 użytkowników) wielokrotnie przekracza liczbę rekordów, które tworzą inne role, i liczbę zamówień w AdventureWorksLT (32). Pula startowa daje prawdziwe `row_count` i `writes` dla operacji zapisu i zero błędów kluczy obcych (D3).
+
+**Konsekwencje dla incydentów (D3):** incydenty używają wyłącznie urządzeń i kont danego użytkownika. Obce urządzenie z zewnętrznym IP (dawniej „ROGUE-EXT-PC” w starym generatorze) zostało usunięte, bo to naruszenie bezpieczeństwa spoza 4 klas behawioralnych. Dzień incydentu wypada w dniu, w którym użyte urządzenie jest zwykle używane, żeby incydent był anomalią tylko w swojej klasie (np. wzrost wolumenu CEO nie wypada w poniedziałek w biurze).
 
 ---
 

@@ -6,131 +6,126 @@ using System.Threading.Tasks;
 
 namespace LOGGER
 {
+    /// <summary>
+    /// LOGGER: eksport zdarzeń Extended Events (.xel) do JSON (schemat xe-export/v2).
+    ///
+    /// Użycie:
+    ///   LOGGER [xel] [wyjście.json] [--user LOGIN | --ceo]
+    ///     xel          plik .xel, katalog albo wzorzec z '*'
+    ///                  (domyślnie wszystkie pliki C:\XELogs\AW2025_Behavioral_Anomaly*.xel)
+    ///     wyjście.json domyślnie data/xe_json/xe_events_&lt;data&gt;.json w repozytorium
+    ///     --user LOGIN eksportuj tylko zdarzenia danego loginu; --ceo = --user CEO_User
+    ///
+    /// LOGGER nie zna etykiet ground truth i nie liczy cech. Eksportuje surowe fakty z XE
+    /// oraz EventUid ze znacznika /* gt:... */; resztę robi anomaly/features/xe_join.py.
+    /// </summary>
     class Program
     {
-        static async Task Main(string[] args)
+        private const string DefaultXelPattern = @"C:\XELogs\AW2025_Behavioral_Anomaly*.xel";
+
+        static async Task<int> Main(string[] args)
         {
             Console.WriteLine("=================================================================");
-            Console.WriteLine(" LOGGER (.NET 9) - Extended Events to ML Feature JSON Extractor");
+            Console.WriteLine(" LOGGER (.NET 9) - Extended Events -> JSON (xe-export/v2)");
             Console.WriteLine("=================================================================\n");
 
-            //Ustalenie ścieżki pliku .xel
-            string xelPath = "";
-            if (args.Length > 0 && !string.IsNullOrWhiteSpace(args[0]))
-            {
-                xelPath = args[0];
-            }
-            else
-            {
-                string xelDir = @"C:\XELogs";
-                if (Directory.Exists(xelDir))
-                {
-                    var xelFiles = Directory.GetFiles(xelDir, "AW2025_Behavioral_Anomaly*.xel")
-                                           .Select(f => new FileInfo(f))
-                                           .OrderByDescending(f => f.LastWriteTimeUtc)
-                                           .ToList();
+            var (positional, userFilter) = ParseArgs(args);
+            string xelSpec = positional.ElementAtOrDefault(0) ?? DefaultXelPattern;
+            string jsonOutputPath = positional.ElementAtOrDefault(1)
+                ?? Path.Combine(ResolveDefaultOutputDir(), $"xe_events_{DateTime.Now:yyyyMMdd_HHmmss}.json");
 
-                    if (xelFiles.Count > 0)
-                    {
-                        xelPath = xelFiles.First().FullName;
-                        Console.WriteLine($"[AUTO] Znaleziono najnowszy plik logów: {Path.GetFileName(xelPath)}");
-                    }
-                    else
-                    {
-                        xelPath = @"C:\XELogs\AW2025_Behavioral_Anomaly*.xel";
-                    }
-                }
-                else
-                {
-                    xelPath = @"C:\XELogs\AW2025_Behavioral_Anomaly*.xel";
-                }
+            List<string> xelFiles = ResolveXelFiles(xelSpec);
+            if (xelFiles.Count == 0)
+            {
+                WriteColored($"[BŁĄD] Nie znaleziono plików .xel dla: {xelSpec}", ConsoleColor.Red);
+                return 1;
             }
 
-            //Ustalenie ścieżki wyjściowej JSON
-            string jsonOutputPath = "";
-            if (args.Length > 1 && !string.IsNullOrWhiteSpace(args[1]))
+            Console.WriteLine($"[1/3] Odczyt {xelFiles.Count} plików .xel:");
+            xelFiles.ForEach(f => Console.WriteLine($"      {f}"));
+            if (!string.IsNullOrEmpty(userFilter))
             {
-                jsonOutputPath = args[1];
-            }
-            else
-            {
-                string outputDir = ResolveDefaultOutputDir();
-                jsonOutputPath = Path.Combine(outputDir, $"ml_feature_vectors_{DateTime.Now:yyyyMMdd_HHmmss}.json");
+                Console.WriteLine($"      filtr użytkownika: {userFilter}");
             }
 
-            Console.WriteLine($"[1/3] Odczyt i ekstrakcja zdarzeń Extended Events z: {xelPath}...");
-
-            var reader = new XeLogReader();
-            List<AnomalyFeatureRecord> records;
-
+            XeReadResult result;
             try
             {
-                records = reader.ReadXelEvents(xelPath).ToList();
+                result = new XeLogReader().ReadXelFiles(xelFiles, userFilter);
             }
             catch (Exception ex)
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"[BŁĄD ODCZYTU XEL]: {ex.Message}");
-                Console.ResetColor();
-                return;
+                WriteColored($"[BŁĄD ODCZYTU XEL]: {ex.Message}", ConsoleColor.Red);
+                return 1;
             }
 
-            Console.WriteLine($"-> Pomyślnie załadowano {records.Count} surowych zdarzeń.");
-
-            if (records.Count == 0)
+            XeReadStats s = result.Stats;
+            Console.WriteLine("\n[2/3] Statystyka odczytu:");
+            Console.WriteLine($"   * Wszystkie zdarzenia w plikach:     {s.TotalEventsRead}");
+            Console.WriteLine($"   * Wyeksportowane zapytania (gt):     {s.ExportedEvents}");
+            Console.WriteLine($"   * Błędy SQL ze znacznikiem gt:       {s.ExportedErrors}");
+            Console.WriteLine($"   * Pominięte: szum systemowy:         {s.SkippedSystemNoise}");
+            Console.WriteLine($"   * Pominięte: bez znacznika gt:       {s.SkippedWithoutGtTag}");
+            Console.WriteLine($"   * Pominięte: filtr użytkownika:      {s.SkippedByUserFilter}");
+            foreach (var run in result.Events.GroupBy(e => e.AppRun).OrderBy(g => g.Key))
             {
-                Console.WriteLine("[INFO] Brak zdarzeń w pliku XEL do eksportu.");
-                return;
+                Console.WriteLine($"   * Przebieg {(string.IsNullOrEmpty(run.Key) ? "(brak)" : run.Key),-20} {run.Count()} zdarzeń");
+            }
+            if (s.ExportedErrors > 0)
+            {
+                WriteColored($"   ! {s.ExportedErrors} błędów SQL w operacjach symulatora: walidacja (xe_join) przerwie przebieg.", ConsoleColor.Yellow);
             }
 
-            //Sprawdzenie opcjonalnego filtra użytkownika (np. --user CEO_User)
+            Console.WriteLine($"\n[3/3] Zapis JSON: {jsonOutputPath}");
+            await JsonExporter.SaveAsync(result, userFilter, jsonOutputPath);
+            WriteColored("-> Sukces.", ConsoleColor.Green);
+            return 0;
+        }
+
+        private static (List<string> positional, string? userFilter) ParseArgs(string[] args)
+        {
+            var positional = new List<string>();
             string? userFilter = null;
-            for (int i = 0; i < args.Length - 1; i++)
+            for (int i = 0; i < args.Length; i++)
             {
-                if (args[i].Equals("--user", StringComparison.OrdinalIgnoreCase))
+                if (args[i].Equals("--ceo", StringComparison.OrdinalIgnoreCase))
                 {
-                    userFilter = args[i + 1];
-                    break;
+                    userFilter = "CEO_User";
+                }
+                else if (args[i].Equals("--user", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    userFilter = args[++i];
+                }
+                else if (!string.IsNullOrWhiteSpace(args[i]))
+                {
+                    positional.Add(args[i]);
                 }
             }
-            if (args.Contains("--ceo", StringComparer.OrdinalIgnoreCase))
+            return (positional, userFilter);
+        }
+
+        /// <summary>Plik, katalog (wszystkie *.xel) albo wzorzec z '*'. Pliki posortowane po nazwie (kolejność rollover).</summary>
+        private static List<string> ResolveXelFiles(string spec)
+        {
+            if (File.Exists(spec))
             {
-                userFilter = "CEO_User";
+                return new List<string> { Path.GetFullPath(spec) };
             }
-
-            if (!string.IsNullOrEmpty(userFilter))
+            string dir, pattern;
+            if (Directory.Exists(spec))
             {
-                records = records.Where(r => r.Username.Equals(userFilter, StringComparison.OrdinalIgnoreCase)).ToList();
-                Console.WriteLine($"[FILTR] Zastosowano filtr użytkownika: {userFilter} (pozostało zdarzeń: {records.Count})");
+                (dir, pattern) = (spec, "*.xel");
             }
-
-            //Statystyki wyekstrahowanych cech
-            int normalCount = records.Count(r => r.IsAnomaly == 0);
-            int anomalyCount = records.Count(r => r.IsAnomaly == 1);
-            Console.WriteLine($"\n[2/3] Statystyka Ground Truth:");
-            Console.WriteLine($"   * Normalne zapytania:  {normalCount}");
-            Console.WriteLine($"   * Wykryte anomalie:    {anomalyCount}");
-
-            var anomalyClasses = records.Where(r => r.IsAnomaly == 1)
-                                        .GroupBy(r => r.AnomalyClass)
-                                        .Select(g => $"{g.Key}: {g.Count()}");
-            if (anomalyCount > 0)
+            else
             {
-                Console.WriteLine($"   * Klasy anomalii:      {string.Join(", ", anomalyClasses)}");
+                dir = Path.GetDirectoryName(spec) ?? ".";
+                pattern = Path.GetFileName(spec);
             }
-
-            var devices = records.GroupBy(r => r.DeviceContext)
-                                 .Select(g => $"{g.Key}: {g.Count()}");
-            Console.WriteLine($"   * Konteksty urządzeń:  {string.Join(", ", devices)}");
-
-            //Eksport do JSON
-            Console.WriteLine($"\n[3/3] Zapisywanie ustrukturyzowanych cech ML do JSON: {jsonOutputPath}...");
-            await MLFeatureExporter.SaveFeatureVectorsToJsonAsync(records, jsonOutputPath);
-
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"\n-> Sukces! Plik JSON został wygenerowany pomyślnie.");
-            Console.WriteLine($"   Ścieżka: {jsonOutputPath}");
-            Console.ResetColor();
+            if (!Directory.Exists(dir))
+            {
+                return new List<string>();
+            }
+            return Directory.GetFiles(dir, pattern).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
         /// <summary>
@@ -161,6 +156,13 @@ namespace LOGGER
             }
 
             return Path.Combine(Directory.GetCurrentDirectory(), "xe_json");
+        }
+
+        private static void WriteColored(string text, ConsoleColor color)
+        {
+            Console.ForegroundColor = color;
+            Console.WriteLine(text);
+            Console.ResetColor();
         }
     }
 }

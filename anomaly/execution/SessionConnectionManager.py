@@ -1,13 +1,11 @@
-from typing import Optional
 from typing import Dict
 from anomaly.execution.DBConfig import DBConfig
 from anomaly.settings import require_db_password
-import pandas as pd
 
 """
-Zarządza pulą połączeń ODBC do bazy danych, 
-dbając o symulację tożsamości stacji roboczej oraz 
-rzekazywanie etykiet Ground Truth do sesji Extended Events.
+Zarządza pulą połączeń ODBC do bazy danych i symuluje tożsamość stacji roboczej
+(host w WSID, urządzenie i IP w nazwie aplikacji). Etykiety ground truth NIE są
+przekazywane do bazy; łączy je z logami dopiero anomaly/features/xe_join.py.
 """
 
 class SessionConnectionManager:
@@ -39,18 +37,32 @@ class SessionConnectionManager:
 
         return "ODBC Driver 17 for SQL Server"
 
-    #tworzy connection string przekazujący parametry WSID oraz APP (nazwa aplikacji zawierająca wstrzyknięty identyfikator scenariusza i flagę anomalii dla Extended Events).
+    @staticmethod
+    def make_app_name(run_id: str, device_context: str, simulated_ip: str) -> str:
+        """
+        Nazwa aplikacji klienta (client_app_name w Extended Events). Niesie wyłącznie kontekst,
+        który w prawdziwym systemie byłby obserwowalny po stronie serwera: przebieg, typ urządzenia
+        i adres IP klienta. NIE zawiera etykiet (anomalia / norma, klasa, incydent).
+
+        Format: SIM|run:<run_id>|dev:<device>|ip:<ip>
+        Bez znaków ';' i '=', które w connection stringu ODBC ucinałyby wartość.
+        Ten sam format odczytuje LOGGER (XeLogReader.cs, ParseAppName).
+        """
+        fields = {"run": run_id, "dev": device_context, "ip": simulated_ip}
+        for key, value in fields.items():
+            if any(ch in str(value) for ch in ";=|:{}"):
+                raise ValueError(f"Niedozwolony znak w polu APP '{key}': {value!r}")
+        return "SIM|" + "|".join(f"{k}:{v}" for k, v in fields.items())
+
+    # Tworzy connection string: WSID = nazwa hosta klienta, APP = kontekst urządzenia i sieci.
     def build_connection_string(
         self,
         client_hostname: str,
         device_context: str,
         simulated_ip: str,
-        user_name: str,
-        scenario_id: Optional[str] = None,
-        is_anomaly: int = 0,
+        run_id: str,
     ) -> str:
-        scen_tag = scenario_id if scenario_id and pd.notna(scenario_id) else "NORMAL_TRAFFIC"
-        app_name = f"CEO_Client;User={user_name};Dev={device_context};IP={simulated_ip};ScenarioID={scen_tag};IsAnomaly={is_anomaly}"
+        app_name = self.make_app_name(run_id, device_context, simulated_ip)
 
         parts = [
             f"Driver={{{self._driver}}}",
@@ -81,9 +93,7 @@ class SessionConnectionManager:
         client_hostname: str,
         device_context: str,
         simulated_ip: str,
-        user_name: str,
-        scenario_id: Optional[str] = None,
-        is_anomaly: int = 0,
+        run_id: str,
     ):
         import pyodbc
 
@@ -104,9 +114,7 @@ class SessionConnectionManager:
             client_hostname=client_hostname,
             device_context=device_context,
             simulated_ip=simulated_ip,
-            user_name=user_name,
-            scenario_id=scenario_id,
-            is_anomaly=is_anomaly,
+            run_id=run_id,
         )
         conn = pyodbc.connect(conn_str, autocommit=True)
         self._active_connections[key] = conn
