@@ -30,6 +30,7 @@ namespace LOGGER
         public string SqlText { get; init; } = string.Empty;
         public int SqlTextLength { get; init; }
         public string OperationType { get; init; } = string.Empty;
+        public string TargetTable { get; init; } = string.Empty;       // tabela główna (po FROM / INTO / UPDATE / DELETE FROM)
         public IReadOnlyList<string> Tables { get; init; } = Array.Empty<string>();
 
         // Metryki wykonania z Extended Events

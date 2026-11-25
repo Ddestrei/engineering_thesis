@@ -30,7 +30,8 @@ def test_tag_rejects_unsafe_uid():
 
 def test_query_contains_only_event_uid():
     """Zapytanie nie może nieść etykiety ani kontekstu, tylko EventUid."""
-    sql = SQLQueryBuilder().build_query("INSERT", "Customer", "validation-s123-000042")
+    sql = SQLQueryBuilder().build_query("INSERT", "Customer", "validation-s123-000042",
+                                        record_key="validation-s123-R000001")
     assert extract_event_uid(sql) == "validation-s123-000042"
     for forbidden in ("ScenarioID", "IsAnomaly", "ANOM_", "SimTime", "Host:", "IP:"):
         assert forbidden not in sql
@@ -92,7 +93,8 @@ def _fake_xe(gt: pd.DataFrame) -> pd.DataFrame:
         "SqlText": "SELECT 1 FROM SalesLT.Customer",
         "SqlTextLength": 30,
         "OperationType": gt["operation_type"],
-        "Tables": [["Customer"]] * len(gt),
+        "TargetTable": gt["target_table"],
+        "Tables": [[t] for t in gt["target_table"]],
         "Result": "OK",
         "DurationMicroseconds": 100, "CpuTimeMicroseconds": 50, "LogicalReads": 3,
         "PhysicalReads": 0, "Writes": 0, "RowCount": 1,
@@ -116,6 +118,8 @@ def test_join_ok(gt):
     assert [c for c in joined.columns if c.startswith("gt_")] == [
         "gt_is_anomaly", "gt_anomaly_class", "gt_incident_id", "gt_severity"]
     assert "sim_timestamp" in joined.columns and "device" in joined.columns
+    assert joined.columns.is_unique                     # wartości kontekstu tylko z XE, bez dublowania
+    assert (joined["target_table"].values == gt["target_table"].values).all()
 
 
 def test_join_ignores_other_runs(gt):
@@ -131,6 +135,7 @@ def test_join_ignores_other_runs(gt):
     (lambda xe: pd.concat([xe, xe.head(1)]), "każde EventUid najwyżej raz"),
     (lambda xe: xe.assign(Result=["Error"] + ["OK"] * (len(xe) - 1)), "wynikiem OK"),
     (lambda xe: xe.assign(AppDevice="Rogue_Device"), "AppDevice"),
+    (lambda xe: xe.assign(TargetTable="ProductCategory"), "TargetTable"),
     (lambda xe: pd.concat([xe, xe.head(1).assign(EventUid=xe["EventUid"].iloc[0][:-6] + "999999")]), "brak sierot"),
 ])
 def test_join_rejects_damaged_runs(gt, damage, failed_check):

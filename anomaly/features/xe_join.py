@@ -9,9 +9,10 @@ Zasady:
 - Połączenie musi być pełne: każde zdarzenie generatora ma dokładnie jedno zdarzenie XE i odwrotnie.
   Każde odstępstwo (brak, duplikat, sierota, błąd SQL, niezgodny kontekst) przerywa przebieg.
 
-Uruchomienie (z katalogu głównego repozytorium):
-    python -m anomaly.features.xe_join                       # najnowszy JSON z data/xe_json/, wszystkie splity
-    python -m anomaly.features.xe_join --xe plik.json --splits train validation
+Uruchomienie (z katalogu głównego repozytorium); zwykle robi to run_experiment.py:
+    python -m anomaly.features.xe_join --seed 11 --split validation
+        (domyślny JSON: data/seed_11/xe/validation-s11.json, wynik: data/seed_11/joined/)
+    python -m anomaly.features.xe_join --seed 11 --split validation --xe inny_plik.json
 """
 from __future__ import annotations
 
@@ -24,9 +25,10 @@ from typing import Dict, List, Sequence, Tuple
 
 import pandas as pd
 
-from anomaly.paths import JOINED_DIR, SPLITS, XE_JSON_DIR, events_csv, joined_csv
+from anomaly.generator.dataset import make_run_id
+from anomaly.paths import DEFAULT_SEED, SPLITS, events_csv, join_report_json, joined_csv, joined_dir, xe_json
 
-XE_SCHEMA = "xe-export/v2"
+XE_SCHEMA = "xe-export/v3"
 
 # Kolumny ground truth (etykiety). Prefiks gt_ oznacza: tylko do oceny, nigdy jako cecha.
 GT_LABEL_COLUMNS = {
@@ -51,7 +53,8 @@ XE_COLUMNS = {
     "SqlText": "sql_text",
     "SqlTextLength": "sql_text_length",
     "OperationType": "operation_type",
-    "Tables": "tables",
+    "TargetTable": "target_table",       # tabela główna zapytania (pierwsza po FROM / INTO / UPDATE / DELETE FROM)
+    "Tables": "tables",                  # wszystkie tabele zapytania (z JOIN-ami)
     "Result": "result",
     "DurationMicroseconds": "duration_us",
     "CpuTimeMicroseconds": "cpu_time_us",
@@ -70,7 +73,11 @@ CONTEXT_CHECKS = [
     ("HostName", "client_hostname"),
     ("Username", "login_name"),
     ("OperationType", "operation_type"),
+    ("TargetTable", "target_table"),
 ]
+
+# Kolumny generatora przenoszone do tabeli połączonej (poza etykietami gt_).
+GT_KEEP = ["event_uid", "run_id", "split", "timestamp", "session_id", "user", "login_name"]
 
 
 class JoinValidationError(RuntimeError):
@@ -131,10 +138,10 @@ def load_xe_export(path: Path) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
     return events, errors, doc
 
 
-def load_ground_truth(splits: Sequence[str]) -> pd.DataFrame:
+def load_ground_truth(splits: Sequence[str], seed: int) -> pd.DataFrame:
     frames = []
     for split in splits:
-        path = events_csv(split)
+        path = events_csv(split, seed)
         if not path.exists():
             raise JoinValidationError(f"Brak pliku ground truth: {path}")
         df = pd.read_csv(path, dtype={"incident_id": "string", "event_uid": "string", "run_id": "string"})
@@ -183,55 +190,58 @@ def validate_and_join(xe_events: pd.DataFrame, xe_errors: pd.DataFrame, gt: pd.D
     if not report.ok:
         return pd.DataFrame(), report
 
-    joined = merged.rename(columns={k: v for k, v in XE_COLUMNS.items() if k != "EventUid"})
+    # Fakty z XE + czas/identyfikatory i etykiety z generatora. Kolumny kontekstu generatora
+    # (urządzenie, host, typ operacji, tabela) służyły tylko do kontroli powyżej i nie są przenoszone,
+    # więc każda kolumna występuje raz, a jej wartość pochodzi z logu XE.
+    xe_cols = [c for c in XE_COLUMNS if c != "EventUid"]
+    joined = merged[GT_KEEP + xe_cols + list(GT_LABEL_COLUMNS)].rename(
+        columns={**{k: XE_COLUMNS[k] for k in xe_cols}, "timestamp": "sim_timestamp",
+                 "session_id": "sim_session_id", **GT_LABEL_COLUMNS})
     joined["tables"] = joined["tables"].map(lambda t: ";".join(t) if isinstance(t, list) else t)
-    joined = joined.rename(columns={"timestamp": "sim_timestamp", "session_id": "sim_session_id", **GT_LABEL_COLUMNS})
-    keep = (["event_uid", "run_id", "split", "sim_timestamp", "sim_session_id", "user", "login_name"]
-            + [v for k, v in XE_COLUMNS.items() if k != "EventUid"]
-            + list(GT_LABEL_COLUMNS.values()))
-    joined = joined[keep].sort_values(["split", "sim_timestamp", "event_uid"], kind="stable").reset_index(drop=True)
+    joined = joined.sort_values(["split", "sim_timestamp", "event_uid"], kind="stable").reset_index(drop=True)
     report.joined_events = len(joined)
     return joined, report
 
 
-def latest_xe_json() -> Path:
-    candidates = sorted(XE_JSON_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime)
-    if not candidates:
-        raise JoinValidationError(f"Brak plików JSON w {XE_JSON_DIR}. Uruchom LOGGER.")
-    return candidates[-1]
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Łączy zdarzenia XE z ground truth po EventUid i waliduje pokrycie.")
-    parser.add_argument("--xe", type=Path, default=None, help="JSON z LOGGER-a (domyślnie najnowszy z data/xe_json/)")
-    parser.add_argument("--splits", nargs="+", default=list(SPLITS), choices=list(SPLITS))
-    args = parser.parse_args(argv)
-
+def join_split(seed: int, split: str, xe_path: Path | None = None, verbose: bool = True) -> JoinReport:
+    """Łączy eksport XE jednego przebiegu z ground truth splitu; zapisuje joined_<split>.csv i raport."""
+    xe_path = Path(xe_path or xe_json(make_run_id(split, seed), seed))
+    out_dir = joined_dir(seed)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    report_path = join_report_json(split, seed)
     try:
-        xe_path = args.xe or latest_xe_json()
         xe_events, xe_errors, _ = load_xe_export(xe_path)
-        gt = load_ground_truth(args.splits)
-    except JoinValidationError as e:
-        print(f"[BŁĄD] {e}")
-        return 1
-
-    joined, report = validate_and_join(xe_events, xe_errors, gt, xe_file=str(xe_path))
-    print(report.summary())
-
-    JOINED_DIR.mkdir(parents=True, exist_ok=True)
-    (JOINED_DIR / "join_report.json").write_text(
+        gt = load_ground_truth([split], seed)
+    except (JoinValidationError, FileNotFoundError) as e:
+        report = JoinReport(xe_file=str(xe_path), runs=[make_run_id(split, seed)])
+        report.add("odczyt plików wejściowych", [str(e)])
+    else:
+        joined, report = validate_and_join(xe_events, xe_errors, gt, xe_file=str(xe_path))
+        if report.ok:
+            joined.to_csv(joined_csv(split, seed), index=False)
+    if not report.ok and joined_csv(split, seed).exists():
+        joined_csv(split, seed).unlink()          # nie zostawiać wyniku poprzedniego, poprawnego przebiegu
+    report_path.write_text(
         json.dumps({"ok": report.ok, "xe_file": report.xe_file, "runs": report.runs,
                     "gt_events": report.gt_events, "joined_events": report.joined_events,
                     "problems": report.problems}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    if not report.ok:
-        return 1
+    if verbose:
+        print(report.summary())
+        if report.ok:
+            print(f"Zapisano {report.joined_events} zdarzeń -> {joined_csv(split, seed)}")
+    return report
 
-    for split, part in joined.groupby("split", sort=False):
-        part.to_csv(joined_csv(split), index=False)
-        print(f"Zapisano {len(part)} zdarzeń -> {joined_csv(split)}")
-    return 0
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Łączy zdarzenia XE z ground truth po EventUid i waliduje pokrycie.")
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--split", choices=list(SPLITS), required=True)
+    parser.add_argument("--xe", type=Path, default=None,
+                        help="JSON z LOGGER-a (domyślnie data/seed_<N>/xe/<split>-s<N>.json)")
+    args = parser.parse_args(argv)
+    return 0 if join_split(args.seed, args.split, args.xe).ok else 1
 
 
 if __name__ == "__main__":

@@ -1,144 +1,40 @@
 """
-Skrypt CLI uruchamiający egzekucję zapytań z plików CSV na bazie danych SQL Server przy użyciu argumentów linii poleceń.
+Wykonanie pliku zdarzeń jednego przebiegu na SQL Server (bez przywracania bazy).
+
+Pełny, powtarzalny przebieg (restore z .bak, role, rekordy startowe, sesja XE, LOGGER, join)
+uruchamia orkiestrator:  python -m anomaly.run_experiment --seed 11
+
+Ten skrypt służy do podglądu zapytań (--dry-run) i do ręcznych prób:
+    python -m anomaly.execution.db_workload_executor --seed 11 --split validation --dry-run
 """
-
 from __future__ import annotations
+
 import argparse
-from pathlib import Path
-from typing import List
+
 from anomaly.execution.DBConfig import DBConfig
+from anomaly.execution.DBWorkloadExecutor import DBWorkloadExecutor
 from anomaly.execution.ExecutionConfig import ExecutionConfig
-from anomaly.execution.DBWorkloadExecutor import logger, DBWorkloadExecutor
-from anomaly.paths import SPLITS, events_csv
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Wykonuje zapytania SQL na bazie SQL Server na podstawie plików CSV z logami CEO."
-    )
-    parser.add_argument(
-        "--csv",
-        type=str,
-        default=str(events_csv("train")),
-        help="Ścieżka do pliku zdarzeń z generatora (domyślnie data/generated/events_train.csv)",
-    )
-    parser.add_argument(
-        "--all-csv",
-        action="store_true",
-        help="Wykonaj po kolei events_train/validation/test.csv z katalogu data/generated/",
-    )
-    parser.add_argument(
-        "--server",
-        type=str,
-        default="localhost",
-        help="Nazwa instancji SQL Server (domyślnie: localhost)",
-    )
-    parser.add_argument(
-        "--database",
-        type=str,
-        default="AdventureWorksLT2025",
-        help="Nazwa bazy danych (domyślnie: AdventureWorksLT2025)",
-    )
-    parser.add_argument(
-        "--schema",
-        type=str,
-        default="SalesLT",
-        help="Schemat tabel (domyślnie: SalesLT)",
-    )
-    parser.add_argument(
-        "--driver",
-        type=str,
-        default=None,
-        help="Nazwa sterownika ODBC (domyślnie: auto-wybór)",
-    )
-    parser.add_argument(
-        "--user",
-        type=str,
-        default="CEO_User",
-        help="Użytkownik SQL Server (domyślnie: CEO_User)",
-    )
-    parser.add_argument(
-        "--password",
-        type=str,
-        default=None,
-        help="Hasło użytkownika SQL Server. Domyślnie pobierane ze zmiennej środowiskowej "
-             "ANOMALY_DB_PASSWORD_<LOGIN> albo z config.local.json (nie podawaj go w kodzie).",
-    )
-    parser.add_argument(
-        "--windows-auth",
-        action="store_true",
-        help="Wymuś uwierzytelnianie zintegrowane Windows (Trusted_Connection) zamiast konta CEO_User",
-    )
-    parser.add_argument(
-        "--delay",
-        type=float,
-        default=0.03,
-        help="Odstęp czasu między kolejnymi zapytaniami w sekundach (domyślnie: 0.03)",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Maksymalna liczba zapytań do wykonania (do szybkich testów)",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Tryb próbny: wypisuje generowane zapytania bez łączenia z bazą danych",
-    )
-    parser.add_argument(
-        "--cleanup",
-        action="store_true",
-        help="Usuń rekordy symulacyjne wstawione do bazy danych",
-    )
-
-    return parser.parse_args()
+from anomaly.paths import DEFAULT_SEED, SPLITS, events_csv, users_csv
 
 
-def main():
-    args = parse_args()
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Wykonuje operacje generatora (events_<split>.csv) na SQL Server.")
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="ziarno (katalog data/seed_<N>/)")
+    parser.add_argument("--split", choices=SPLITS, default="validation")
+    parser.add_argument("--dry-run", action="store_true", help="tylko buduje i wypisuje zapytania")
+    parser.add_argument("--limit", type=int, default=None, help="tylko pierwsze N operacji")
+    parser.add_argument("--delay", type=float, default=0.0, help="odstęp między zapytaniami [s]")
+    parser.add_argument("--driver", type=str, default=None, help="sterownik ODBC (domyślnie auto)")
+    return parser.parse_args(argv)
 
-    use_trusted = args.windows_auth
 
-    db_cfg = DBConfig(
-        server=args.server,
-        database=args.database,
-        schema=args.schema,
-        driver=args.driver,
-        trusted_connection=use_trusted,
-        username=None if use_trusted else args.user,
-        password=None if use_trusted else args.password,
-    )
-
-    exec_cfg = ExecutionConfig(
-        delay_sec=args.delay,
-        dry_run=args.dry_run,
-        limit=args.limit,
-    )
-
-    executor = DBWorkloadExecutor(db_cfg, exec_cfg)
-
-    if args.cleanup:
-        executor.cleanup_simulation_data()
-        return
-
-    csv_targets: List[Path] = []
-    if args.all_csv:
-        csv_targets = [events_csv(split) for split in SPLITS]
-    else:
-        csv_targets = [Path(args.csv)]
-
-    for target in csv_targets:
-        if not target.exists():
-            logger.warning(f"Pominięto nieistniejący plik: {target}")
-            continue
-
-        executor.execute_csv(target)
-
-    if not args.dry_run:
-        logger.info("\n[WSKAZÓWKA]:")
-        logger.info("Extended Events buforuje zdarzenia w pamięci podręcznej.")
-        logger.info("Odczekaj 5 sekund (MAX_DISPATCH_LATENCY) przed odczytem pliku .xel w aplikacji LOGGER!")
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    executor = DBWorkloadExecutor(DBConfig(driver=args.driver),
+                                  ExecutionConfig(delay_sec=args.delay, dry_run=args.dry_run, limit=args.limit))
+    stats = executor.execute_csv(events_csv(args.split, args.seed), users_csv(args.seed))
+    return 0 if stats["ok"] else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

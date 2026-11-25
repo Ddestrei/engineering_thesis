@@ -1,18 +1,20 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
-#Przechowuje konfigurację parametrów połączeniowych do instancji Microsoft SQL Server.
+from anomaly.settings import get_setting
+
+# Parametry połączenia z instancją Microsoft SQL Server dla loginów symulacji.
+# Login wynika z operacji (kolumna login_name generatora), hasło z anomaly/settings.py.
+
 
 @dataclass
 class DBConfig:
-    server: str = "localhost"
-    database: str = "AdventureWorksLT2025"
+    server: str = field(default_factory=lambda: get_setting("server"))
+    database: str = field(default_factory=lambda: get_setting("database"))
     schema: str = "SalesLT"
     driver: Optional[str] = None
-    trusted_connection: bool = False
-    username: Optional[str] = "CEO_User"
-    # Hasło nie jest zapisane w kodzie. Gdy None, pobierane jest przy łączeniu
-    # ze zmiennej środowiskowej albo z config.local.json (anomaly/settings.py).
+    # Hasło nie jest zapisane w kodzie. Gdy None, pobierane jest przy łączeniu ze zmiennej
+    # środowiskowej albo z config.local.json (anomaly/settings.py).
     password: Optional[str] = None
     trust_server_certificate: bool = True
-    login_timeout: int = 5
+    login_timeout: int = 10

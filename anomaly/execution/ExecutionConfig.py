@@ -1,12 +1,11 @@
 from dataclasses import dataclass
 from typing import Optional
 
-#Przechowuje parametry wykonawcze dotyczące egzekucji zapytań SQL na rzeczywistej bazie danych.
+# Parametry wykonania operacji generatora na bazie danych.
+
 
 @dataclass
 class ExecutionConfig:
-    delay_sec: float = 0.05
-    dry_run: bool = False
-    limit: Optional[int] = None
-    cleanup: bool = False
-    simulate_user_as_ceo: bool = True
+    delay_sec: float = 0.0          # odstęp między zapytaniami (czas symulowany pochodzi z generatora, D11)
+    dry_run: bool = False           # buduje zapytania bez łączenia z bazą
+    limit: Optional[int] = None     # tylko pierwsze N operacji (szybkie próby; przebieg niepełny)

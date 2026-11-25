@@ -115,6 +115,8 @@ Wagi ustalone a priori i niezmieniane po obejrzeniu wyników TEST. Składniki po
 - Czas to **czas symulowany** (`SimTime` z generatora), naiwny (bez strefy czasowej), interpretowany jako czas lokalny firmy. Metryki wykonania (duration, reads, rows) są **rzeczywiste** z Extended Events.
 - Zdarzenia przypisywane są do okien po joinie z ground truth po `EventUid`. Zdarzenie XE bez pary w generatorze przerywa przebieg (wymagane pokrycie 100%).
 - **Źródło danych w tabeli połączonej:** z Extended Events pochodzą wszystkie fakty obserwowalne: metryki wykonania, tekst SQL (bez znacznika), login, host (`WSID`), typ urządzenia i IP (nazwa aplikacji klienta). Z generatora pochodzą wyłącznie czas symulowany i etykiety (kolumny `gt_*`), które służą tylko do oceny. Do SQL Server trafia jedynie `EventUid`; etykieta nigdy nie przechodzi przez bazę.
+- **Wykonanie przebiegu (Faza 4):** przed każdym przebiegiem (split × ziarno) baza jest przywracana z oryginalnego `AdventureWorksLT2025.bak`, a potem dostaje role, 30 loginów `SIM_<ROLA>_<nr>` i rekordy startowe (D20). Dzięki temu metryki wykonania (odczyty logiczne, liczba wierszy) nie zależą od wcześniejszych przebiegów. Operacje wykonywane są w kolejności czasu symulowanego; każda sesja generatora to osobne połączenie z loginem użytkownika. Każdy przebieg ma osobny plik `.xel`.
+- **Utrata zdarzeń XE:** sesja działa w trybie `ALLOW_SINGLE_EVENT_LOSS` (SQL Server nie dopuszcza `NO_EVENT_LOSS` dla zdarzenia `error_reported`), z buforem 32 MB. Utrata zdarzenia nie przechodzi niezauważona: brak pary dla zdarzenia generatora odrzuca przebieg (pokrycie 100%).
 
 ### D12. Baseline statystyczny (robust)
 - Dla każdej cechy ciągłej i każdej jednostki modelowania (D17) z okien TRAIN liczone są mediana *m* i skala `s = 1,4826 · MAD`.
@@ -141,9 +143,10 @@ Wagi ustalone a priori i niezmieniane po obejrzeniu wyników TEST. Składniki po
 | **Wolumen** | `operation_count`, `session_count`, `ops_per_session`, `volume_ratio_to_median` |
 | **Kontekst** | `device_type` (one-hot), `ip_known_flag`, `role_id` (tylko w wariancie globalnym) |
 | **Proporcje operacji** | `select_ratio`, `insert_ratio`, `update_ratio`, `delete_ratio` |
-| **Zasoby** | `unique_tables`, `rare_resource_score`, `new_table_flag` |
+| **Zasoby** | `unique_tables`, `rare_resource_score`, `new_table_flag` (z tabeli docelowej operacji, `TargetTable`) |
 | **Wykonanie** | `sum_logical_reads`, `sum_rows`, `mean_duration`, `avg_query_complexity` (liczba JOIN-ów, długość SQL **bez komentarza z identyfikatorem**) |
 
+- **Tabela operacji:** cechy grupy Zasoby liczone są z tabeli docelowej (`TargetTable` z logu XE: pierwsza tabela po `FROM`/`INTO`/`UPDATE`/`DELETE FROM`). Pełna lista tabel zapytania (`Tables`) zawiera też tabele dołączane JOIN-em i tabele rodziców wyszukiwanych podzapytaniem w INSERT (np. model i opis przy powiązaniu `ProductModelProductDescription`); służy tylko do `avg_query_complexity`. JOIN-y w zapytaniach normy łączą wyłącznie tabele dozwolone dla roli i nie dołączają rzadkich tabel użytkownika (D15).
 - Cechy „rzadkości” i „względem normy” (`hour_rarity`, `after_hours_flag`, `volume_ratio_to_median`, `rare_resource_score`, `new_table_flag`, `ip_known_flag`) liczone są **wyłącznie z TRAIN**, na poziomie jednostki modelowania (D17).
 - **Konfiguracje ablacji:**
   - pojedyncze grupy: Czas, Wolumen, Kontekst (to bezpośrednio sprawdza H2),
@@ -232,7 +235,8 @@ Severity (1–5) **nie jest losowana**. Wyznacza się ją deterministycznie z ce
 - **INSERT** tworzy nowy rekord symulacyjny. Rekord zależny odwołuje się do rodzica wstawionego wcześniej **w tej samej sesji**, jeśli istnieje (zamówienie, potem pozycje; nowy adres, potem powiązanie z klientem; nowy opis, potem powiązanie z modelem). W przeciwnym razie odwołuje się do rekordu z puli aktualizacji.
 - **UPDATE** trafia w rekord z **puli aktualizacji** danej tabeli (do 20 rekordów startowych na tabelę i przebieg, nigdy nieusuwanych).
 - **DELETE** trafia w **świeży rekord startowy bez rekordów zależnych**, użyty tylko raz. Wyjątek z profilu Marketing Managera: usunięcie szkicu wstawionego wcześniej w tej samej sesji.
-- **Rekordy startowe** (`seed_records_<split>.csv`) wstawia wykonawca jako administrator przed przebiegiem (Faza 4). Nie niosą znacznika gt, więc nie trafiają do danych eksperymentu.
+- **Rekordy startowe** (`seed_records_<split>.csv`) wstawia orkiestrator jako administrator przed przebiegiem, po przywróceniu bazy z `.bak`. Nie niosą znacznika gt, więc nie trafiają do danych eksperymentu.
+- **Adresowanie rekordu:** klucz generatora (`record_key`) zamieniany jest na deterministyczny `rowguid` (UUID v5); UPDATE i DELETE mają postać `WHERE rowguid = '…'`, a INSERT rekordu zależnego wyszukuje rodzica podzapytaniem po `rowguid`. Każdy zapis musi zmienić dokładnie jeden wiersz, inaczej przebieg jest odrzucany.
 
 **Uzasadnienie:** wolumen DELETE (np. CFO około 90 tygodniowo na 5 użytkowników) wielokrotnie przekracza liczbę rekordów, które tworzą inne role, i liczbę zamówień w AdventureWorksLT (32). Pula startowa daje prawdziwe `row_count` i `writes` dla operacji zapisu i zero błędów kluczy obcych (D3).
 
@@ -275,6 +279,7 @@ H1, H2 i H5 pozostają bez zmian.
 - Host i IP są deklarowane przez klienta (`WSID`, znacznik symulacji), a nie weryfikowane sieciowo.
 - n = 5 powtórzeń daje szerokie przedziały ufności.
 - Naruszenia uprawnień są poza zakresem (D3).
+- Treść zapytań pochodzi z szablonów (kilka do kilkunastu na tabelę i operację). Baza AdventureWorksLT jest mała, więc metryki wykonania (odczyty, czas) mają niewielką zmienność; grupa cech Wykonanie może przez to wnosić mało informacji.
 
 ---
 
@@ -283,3 +288,4 @@ H1, H2 i H5 pozostają bez zmian.
 | Data | Decyzja | Zmiana | Powód |
 |---|---|---|---|
 | 25.11.2026 | – | wersja początkowa | – |
+| 25.11.2026 | D11, D14, D20 | Faza 4: restore z `.bak` przed przebiegiem, `TargetTable` jako źródło cech Zasoby, adresowanie po `rowguid`, tryb utraty zdarzeń XE | doprecyzowanie przed pierwszym uruchomieniem na TEST (wynika z implementacji, nie z wyników) |

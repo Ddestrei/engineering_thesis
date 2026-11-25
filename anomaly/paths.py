@@ -3,49 +3,87 @@ Wspólne ścieżki projektu.
 
 Wszystkie ścieżki liczone są względem katalogu głównego repozytorium,
 dzięki czemu skrypty działają niezależnie od katalogu, z którego zostały uruchomione.
+
+Dane każdego ziarna (METODOLOGIA D6) leżą w osobnym katalogu data/seed_<N>/:
+    generated/   pliki generatora (ground truth, rekordy startowe, użytkownicy)
+    xe/          eksport JSON z LOGGER-a, jeden plik na przebieg (<run_id>.json)
+    joined/      zdarzenia XE połączone z ground truth + raporty walidacji
+    run_summary.json  podsumowanie przebiegu run_experiment (czasy, statystyki)
 """
 from pathlib import Path
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[1]
 
 SQL_DIR: Path = REPO_ROOT / "sql_files"
+LOGGER_PROJECT: Path = REPO_ROOT / "LOGGER"
 
 # Dane i wyniki są generowane przez skrypty i nie trafiają do gita (.gitignore).
 DATA_DIR: Path = REPO_ROOT / "data"
-GENERATED_DIR: Path = DATA_DIR / "generated"   # CSV z generatora
-XE_JSON_DIR: Path = DATA_DIR / "xe_json"       # JSON z programu LOGGER
+XE_JSON_DIR: Path = DATA_DIR / "xe_json"       # domyślne wyjście LOGGER-a uruchamianego ręcznie
 
 RESULTS_DIR: Path = REPO_ROOT / "results"
 ML_RESULTS_DIR: Path = RESULTS_DIR / "ml"
 EDA_PLOTS_DIR: Path = RESULTS_DIR / "eda_plots"
 
-JOINED_DIR: Path = DATA_DIR / "joined"         # zdarzenia XE połączone z ground truth
-
 LOCAL_CONFIG_FILE: Path = REPO_ROOT / "config.local.json"
 
 SPLITS = ("train", "validation", "test")
+DEFAULT_SEED = 11
 
 
-def events_csv(split: str) -> Path:
+def seed_dir(seed: int) -> Path:
+    return DATA_DIR / f"seed_{seed}"
+
+
+def generated_dir(seed: int) -> Path:
+    return seed_dir(seed) / "generated"
+
+
+def xe_dir(seed: int) -> Path:
+    return seed_dir(seed) / "xe"
+
+
+def joined_dir(seed: int) -> Path:
+    return seed_dir(seed) / "joined"
+
+
+def events_csv(split: str, seed: int) -> Path:
     """Ground truth per operacja (jeden wiersz = jedno zapytanie wysłane do bazy)."""
-    return GENERATED_DIR / f"events_{split}.csv"
+    return generated_dir(seed) / f"events_{split}.csv"
 
 
-def incidents_csv(split: str) -> Path:
+def incidents_csv(split: str, seed: int) -> Path:
     """Ground truth per incydent (jeden wiersz = jedna wstrzyknięta anomalia)."""
-    return GENERATED_DIR / f"incidents_{split}.csv"
+    return generated_dir(seed) / f"incidents_{split}.csv"
 
 
-def seed_records_csv(split: str) -> Path:
+def seed_records_csv(split: str, seed: int) -> Path:
     """Rekordy startowe do wstawienia przed przebiegiem (cele UPDATE/DELETE i rodzice)."""
-    return GENERATED_DIR / f"seed_records_{split}.csv"
+    return generated_dir(seed) / f"seed_records_{split}.csv"
 
 
-def users_csv() -> Path:
+def users_csv(seed: int) -> Path:
     """Użytkownicy symulacji (role, loginy, urządzenia, rzadkie tabele)."""
-    return GENERATED_DIR / "users.csv"
+    return generated_dir(seed) / "users.csv"
 
 
-def joined_csv(split: str) -> Path:
+def generator_report_txt(seed: int) -> Path:
+    return generated_dir(seed) / "generator_report.txt"
+
+
+def xe_json(run_id: str, seed: int) -> Path:
+    """Eksport LOGGER-a dla jednego przebiegu."""
+    return xe_dir(seed) / f"{run_id}.json"
+
+
+def joined_csv(split: str, seed: int) -> Path:
     """Zdarzenia z Extended Events połączone z ground truth po EventUid."""
-    return JOINED_DIR / f"joined_{split}.csv"
+    return joined_dir(seed) / f"joined_{split}.csv"
+
+
+def join_report_json(split: str, seed: int) -> Path:
+    return joined_dir(seed) / f"join_report_{split}.json"
+
+
+def run_summary_json(seed: int) -> Path:
+    return seed_dir(seed) / "run_summary.json"

@@ -7,26 +7,27 @@ using System.Threading.Tasks;
 namespace LOGGER
 {
     /// <summary>
-    /// LOGGER: eksport zdarzeń Extended Events (.xel) do JSON (schemat xe-export/v2).
+    /// LOGGER: eksport zdarzeń Extended Events (.xel) do JSON (schemat xe-export/v3).
     ///
     /// Użycie:
-    ///   LOGGER [xel] [wyjście.json] [--user LOGIN | --ceo]
+    ///   LOGGER [xel] [wyjście.json] [--user LOGIN]
     ///     xel          plik .xel, katalog albo wzorzec z '*'
-    ///                  (domyślnie wszystkie pliki C:\XELogs\AW2025_Behavioral_Anomaly*.xel)
+    ///                  (domyślnie wszystkie pliki C:\XELogs\*.xel; run_experiment.py podaje
+    ///                  pliki jednego przebiegu, np. C:\XELogs\validation-s11__20261125_120000*.xel)
     ///     wyjście.json domyślnie data/xe_json/xe_events_&lt;data&gt;.json w repozytorium
-    ///     --user LOGIN eksportuj tylko zdarzenia danego loginu; --ceo = --user CEO_User
+    ///     --user LOGIN eksportuj tylko zdarzenia danego loginu (np. SIM_CFO_03)
     ///
     /// LOGGER nie zna etykiet ground truth i nie liczy cech. Eksportuje surowe fakty z XE
     /// oraz EventUid ze znacznika /* gt:... */; resztę robi anomaly/features/xe_join.py.
     /// </summary>
     class Program
     {
-        private const string DefaultXelPattern = @"C:\XELogs\AW2025_Behavioral_Anomaly*.xel";
+        private const string DefaultXelPattern = @"C:\XELogs\*.xel";
 
         static async Task<int> Main(string[] args)
         {
             Console.WriteLine("=================================================================");
-            Console.WriteLine(" LOGGER (.NET 9) - Extended Events -> JSON (xe-export/v2)");
+            Console.WriteLine(" LOGGER (.NET 9) - Extended Events -> JSON (xe-export/v3)");
             Console.WriteLine("=================================================================\n");
 
             var (positional, userFilter) = ParseArgs(args);
@@ -88,11 +89,7 @@ namespace LOGGER
             string? userFilter = null;
             for (int i = 0; i < args.Length; i++)
             {
-                if (args[i].Equals("--ceo", StringComparison.OrdinalIgnoreCase))
-                {
-                    userFilter = "CEO_User";
-                }
-                else if (args[i].Equals("--user", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                if (args[i].Equals("--user", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
                 {
                     userFilter = args[++i];
                 }

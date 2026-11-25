@@ -10,5 +10,6 @@ Pliki w tym katalogu pochodzą z wersji projektu sprzed 25.11.2026 (commity do `
 | `eda_plots/`, `RAPORT_EDA.md` | `eda_pipeline.py` na `LOGI/`, 6.11.2026 | Opisuje inny profil CEO niż obecny (np. host `CEO-HOME-PC`, inne wagi tabel). |
 | `RAPORT_MODELOWANIE_ML.md` | na podstawie `results_ml/`, 7.11.2026 | Jak wyżej dla `results_ml/`. |
 | `ceo_generator_report.md` | 29.10.2026 | Opis wcześniejszej wersji generatora. |
+| `stary_ceo_user/` | `create_ceo_user.sql`, `setup_ceo_user.py`, do 25.11.2026 | Jeden login `CEO_User` zastąpiły 30 loginów `SIM_<ROLA>_<nr>` z rolami bazodanowymi (Faza 4, `anomaly/execution/db_admin.py`). Login `CEO_User` jest usuwany z serwera przez `run_experiment.py`. |
 
 Szczegóły problemów: [PLAN_NAPRAWCZY.md](../PLAN_NAPRAWCZY.md), sekcje 0 i 4. Nowe wyniki powstaną w katalogu `results/` według [METODOLOGIA.md](../METODOLOGIA.md).

@@ -1,9 +1,10 @@
 {
-  "_opis": "Skopiuj ten plik jako config.local.json i wpisz prawdziwe hasła. config.local.json jest w .gitignore i nie trafia do repozytorium.",
-  "db_passwords": {
-    "CEO_User": "WPISZ_HASLO"
-  },
+  "_opis": "Skopiuj ten plik jako config.local.json i wpisz prawdziwe hasło. config.local.json jest w .gitignore i nie trafia do repozytorium.",
+  "sim_password": "WPISZ_HASLO_LOGINOW_SIM",
   "settings": {
-    "server": "localhost"
+    "server": "localhost",
+    "database": "AdventureWorksLT2025",
+    "backup_file": null,
+    "xe_dir": "C:\\XELogs"
   }
 }

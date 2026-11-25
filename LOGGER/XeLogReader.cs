@@ -23,6 +23,12 @@ namespace LOGGER
         // Tabele schematu SalesLT, np. SalesLT.Customer, [SalesLT].[Customer].
         private static readonly Regex TableRegex = new(@"\[?SalesLT\]?\s*\.\s*\[?(?<table>\w+)\]?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+        // Tabela główna zapytania: pierwsza po FROM (SELECT), INTO, UPDATE albo DELETE FROM.
+        // Ten sam wzorzec ma Python (anomaly/execution/SQLQueryBuilder.py, PRIMARY_TABLE_REGEX).
+        private static readonly Regex PrimaryTableRegex = new(
+            @"^\s*(?:SELECT\b.*?\bFROM|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+\[?SalesLT\]?\s*\.\s*\[?(?<table>\w+)\]?",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
         private static readonly HashSet<string> CompletedEventNames = new(StringComparer.OrdinalIgnoreCase)
         {
             "sql_batch_completed", "rpc_completed", "sql_statement_completed"
@@ -48,10 +54,15 @@ namespace LOGGER
 
         private void Map(PublishedEvent ev, string? userFilter, XeReadResult result)
         {
-            string rawSql = GetActionString(ev, "sql_text") ?? GetFieldString(ev, "batch_text") ?? GetFieldString(ev, "statement") ?? string.Empty;
+            bool isError = ev.Name.Equals("error_reported", StringComparison.OrdinalIgnoreCase);
+            // Tekst SQL z pola samego zdarzenia (batch_text / statement). Akcja sql_text to bufor wejściowy
+            // sesji: dla wewnętrznych wywołań RPC sterownika ODBC (rpc_completed) zawiera jeszcze poprzedni
+            // batch razem ze znacznikiem gt, co dawało zdublowane EventUid. Dla error_reported (bez pola
+            // z tekstem) akcja sql_text wskazuje batch, który zgłosił błąd.
+            string rawSql = (isError ? null : GetFieldString(ev, "batch_text") ?? GetFieldString(ev, "statement"))
+                ?? GetActionString(ev, "sql_text") ?? string.Empty;
             string clientApp = GetActionString(ev, "client_app_name") ?? string.Empty;
             string username = GetActionString(ev, "server_principal_name") ?? GetActionString(ev, "username") ?? string.Empty;
-            bool isError = ev.Name.Equals("error_reported", StringComparison.OrdinalIgnoreCase);
 
             // Szum systemowy: telemetria serwera, reset połączeń z puli, komunikaty informacyjne.
             if (username.Equals(@"NT SERVICE\SQLTELEMETRY", StringComparison.OrdinalIgnoreCase)
@@ -123,6 +134,7 @@ namespace LOGGER
                 SqlText = sqlText,
                 SqlTextLength = sqlText.Length,
                 OperationType = DetermineOperationType(sqlText),
+                TargetTable = ExtractTargetTable(sqlText),
                 Tables = ExtractTables(sqlText),
                 Result = GetFieldString(ev, "result") ?? string.Empty,
                 DurationMicroseconds = GetFieldLong(ev, "duration"),
@@ -165,6 +177,13 @@ namespace LOGGER
             }
             if (body.StartsWith("EXEC", StringComparison.Ordinal)) return "EXEC";
             return string.IsNullOrWhiteSpace(body) ? "UNKNOWN" : "OTHER";
+        }
+
+        public static string ExtractTargetTable(string sqlText)
+        {
+            string body = LeadingCommentsRegex.Replace(sqlText, string.Empty, 1);
+            Match m = PrimaryTableRegex.Match(body);
+            return m.Success ? m.Groups["table"].Value : string.Empty;
         }
 
         public static IReadOnlyList<string> ExtractTables(string sqlText)

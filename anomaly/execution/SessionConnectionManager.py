@@ -1,40 +1,38 @@
 from typing import Dict
+
 from anomaly.execution.DBConfig import DBConfig
 from anomaly.settings import require_db_password
 
 """
-Zarządza pulą połączeń ODBC do bazy danych i symuluje tożsamość stacji roboczej
-(host w WSID, urządzenie i IP w nazwie aplikacji). Etykiety ground truth NIE są
+Połączenia ODBC symulowanych użytkowników. Jedno połączenie = jedna sesja generatora:
+login użytkownika (SIM_<ROLA>_<nr>), host w WSID, urządzenie i IP w nazwie aplikacji.
+Połączenie jest zamykane po ostatniej operacji sesji. Etykiety ground truth NIE są
 przekazywane do bazy; łączy je z logami dopiero anomaly/features/xe_join.py.
 """
+
 
 class SessionConnectionManager:
 
     def __init__(self, db_cfg: DBConfig):
         self.cfg = db_cfg
         self._driver = self._resolve_driver()
-        self._active_connections: Dict[str, any] = {}
+        self._active: Dict[str, object] = {}
+        self.opened = 0
 
-    #wybiera najnowszy dostępny w systemie Windows sterownik ODBC.
+    # Wybiera najnowszy dostępny w systemie sterownik ODBC.
     def _resolve_driver(self) -> str:
         if self.cfg.driver:
             return self.cfg.driver
-
         try:
             import pyodbc
             drivers = pyodbc.drivers()
-            for preferred in [
-                "ODBC Driver 18 for SQL Server",
-                "ODBC Driver 17 for SQL Server",
-                "SQL Server",
-            ]:
+            for preferred in ("ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server", "SQL Server"):
                 if preferred in drivers:
                     return preferred
             if drivers:
                 return drivers[0]
         except Exception:
             pass
-
         return "ODBC Driver 17 for SQL Server"
 
     @staticmethod
@@ -54,76 +52,45 @@ class SessionConnectionManager:
                 raise ValueError(f"Niedozwolony znak w polu APP '{key}': {value!r}")
         return "SIM|" + "|".join(f"{k}:{v}" for k, v in fields.items())
 
-    # Tworzy connection string: WSID = nazwa hosta klienta, APP = kontekst urządzenia i sieci.
-    def build_connection_string(
-        self,
-        client_hostname: str,
-        device_context: str,
-        simulated_ip: str,
-        run_id: str,
-    ) -> str:
-        app_name = self.make_app_name(run_id, device_context, simulated_ip)
-
+    # Connection string: login użytkownika symulacji, WSID = host klienta, APP = kontekst urządzenia i sieci.
+    def build_connection_string(self, login_name: str, client_hostname: str, device_context: str,
+                                simulated_ip: str, run_id: str) -> str:
         parts = [
             f"Driver={{{self._driver}}}",
             f"Server={self.cfg.server}",
             f"Database={self.cfg.database}",
-            f"APP={app_name}",
+            f"APP={self.make_app_name(run_id, device_context, simulated_ip)}",
             f"WSID={client_hostname}",
             f"LoginTimeout={self.cfg.login_timeout}",
+            f"UID={login_name}",
+            f"PWD={self.cfg.password or require_db_password(login_name)}",
         ]
-
-        if self.cfg.trusted_connection:
-            parts.append("Trusted_Connection=yes")
-        else:
-            if self.cfg.username:
-                parts.append(f"UID={self.cfg.username}")
-                password = self.cfg.password or require_db_password(self.cfg.username)
-                parts.append(f"PWD={password}")
-
         if "18" in self._driver or self.cfg.trust_server_certificate:
             parts.append("TrustServerCertificate=yes")
-
         return ";".join(parts) + ";"
 
-    #zwraca istniejące otwarte połączenie dla danej sesji i hosta (weryfikując jego stan przez SELECT 1) lub otwiera nowe połączenie i dodaje je do puli.
-    def get_connection(
-        self,
-        session_id: str,
-        client_hostname: str,
-        device_context: str,
-        simulated_ip: str,
-        run_id: str,
-    ):
-        import pyodbc
-
-        key = f"{session_id}_{client_hostname}"
-        if key in self._active_connections:
-            conn = self._active_connections[key]
-            try:
-                conn.cursor().execute("SELECT 1")
-                return conn
-            except Exception:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                del self._active_connections[key]
-
-        conn_str = self.build_connection_string(
-            client_hostname=client_hostname,
-            device_context=device_context,
-            simulated_ip=simulated_ip,
-            run_id=run_id,
-        )
-        conn = pyodbc.connect(conn_str, autocommit=True)
-        self._active_connections[key] = conn
+    def get_connection(self, session_id: str, login_name: str, client_hostname: str, device_context: str,
+                       simulated_ip: str, run_id: str):
+        """Połączenie sesji (otwierane przy pierwszej operacji). Bez zapytań kontrolnych typu SELECT 1:
+        każde zapytanie w logu XE pochodzi z generatora."""
+        conn = self._active.get(session_id)
+        if conn is None:
+            import pyodbc
+            pyodbc.pooling = False          # każda sesja to osobne logowanie (bez sp_reset_connection)
+            conn = pyodbc.connect(self.build_connection_string(
+                login_name, client_hostname, device_context, simulated_ip, run_id), autocommit=True)
+            self._active[session_id] = conn
+            self.opened += 1
         return conn
 
-    def close_all(self):
-        for key, conn in list(self._active_connections.items()):
+    def close(self, session_id: str) -> None:
+        conn = self._active.pop(session_id, None)
+        if conn is not None:
             try:
                 conn.close()
             except Exception:
                 pass
-        self._active_connections.clear()
+
+    def close_all(self) -> None:
+        for session_id in list(self._active):
+            self.close(session_id)

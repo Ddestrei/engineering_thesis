@@ -7,13 +7,13 @@ using System.Threading.Tasks;
 namespace LOGGER
 {
     /// <summary>
-    /// Zapis wyniku odczytu do JSON (schemat "xe-export/v2"):
+    /// Zapis wyniku odczytu do JSON (schemat "xe-export/v3"; v3 dodaje TargetTable):
     /// { schema, exported_at, source_files, user_filter, stats, events[], errors[] }.
     /// Plik czyta anomaly/features/xe_join.py.
     /// </summary>
     public static class JsonExporter
     {
-        public const string Schema = "xe-export/v2";
+        public const string Schema = "xe-export/v3";
 
         public static async Task SaveAsync(XeReadResult result, string? userFilter, string outputPath)
         {

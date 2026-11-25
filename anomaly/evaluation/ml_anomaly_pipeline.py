@@ -8,7 +8,7 @@ from typing import Dict, List
 import pandas as pd
 from anomaly.features.AnomalyDataLoader import AnomalyDataLoader, FEATURE_NAMES
 from anomaly.models.AnomalyDetectionPipeline import AnomalyDetectionPipeline
-from anomaly.paths import ML_RESULTS_DIR, events_csv
+from anomaly.paths import DEFAULT_SEED, ML_RESULTS_DIR, events_csv
 
 
 FEATURE_GROUPS: Dict[str, List[str]] = {
@@ -76,8 +76,8 @@ def main():
     print("=" * 80)
 
     # UWAGA (stan przejściowy do Fazy 5): eksperyment czyta jeszcze pliki generatora,
-    # a nie zdarzenia z Extended Events (data/joined/). Zmienia to Faza 5 planu.
-    train_path, val_path, test_path = (events_csv(s) for s in ("train", "validation", "test"))
+    # a nie zdarzenia z Extended Events (data/seed_<N>/joined/). Zmienia to Faza 5 planu.
+    train_path, val_path, test_path = (events_csv(s, DEFAULT_SEED) for s in ("train", "validation", "test"))
     missing = [p for p in (train_path, val_path, test_path) if not p.exists()]
     if missing:
         raise FileNotFoundError(

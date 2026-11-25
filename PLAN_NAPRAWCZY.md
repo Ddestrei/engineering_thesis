@@ -34,9 +34,9 @@ Kolejność wynika z zależności: bez ground truth (Faza 2) nie da się wiarygo
 ### Faza 1: Porządki w repozytorium ✅ (zakończona 25.11.2026)
 
 - [x] [.gitignore](.gitignore) (`bin/`, `obj/`, `.vs/`, `__pycache__/`, `*.xel`, `/data/`, `/results/`, `config.local.json`); `LOGGER/bin`, `LOGGER/obj`, `LOGGER/.vs` i `__pycache__` usunięte z indeksu gita.
-- [x] Hasło usunięte z kodu. Python pobiera je przez [anomaly/settings.py](anomaly/settings.py) ze zmiennej `ANOMALY_DB_PASSWORD_<LOGIN>` albo z `config.local.json` (wzór: [config.example.json](config.example.json)); [create_ceo_user.sql](sql_files/create_ceo_user.sql) używa zmiennej SQLCMD `$(CEO_PASSWORD)`. **Hasło zostaje w historii gita** (zostało wypchnięte na GitHub), więc trzeba je zmienić na serwerze SQL.
+- [x] Hasło usunięte z kodu. Python pobiera je przez [anomaly/settings.py](anomaly/settings.py) ze zmiennej `ANOMALY_DB_PASSWORD_<LOGIN>` albo z `config.local.json` (wzór: [config.example.json](config.example.json)); [create_ceo_user.sql](archiwum/stary_ceo_user/create_ceo_user.sql) (od Fazy 4 w archiwum) używał zmiennej SQLCMD `$(CEO_PASSWORD)`. **Hasło zostaje w historii gita** (zostało wypchnięte na GitHub), więc trzeba je zmienić na serwerze SQL.
 - [x] Ścieżka `C:\Users\ddest\...\LOGI` w [Program.cs](LOGGER/Program.cs) zastąpiona wyszukaniem katalogu repozytorium (`data/xe_json/`), z nadpisaniem przez argument albo `ANOMALY_XE_JSON_DIR`.
-- [x] [setup_ceo_user.py](anomaly/execution/setup_ceo_user.py): poprawna ścieżka do `sql_files/`, podział batchy po liniach `GO`, kod wyjścia ≠ 0 przy błędach.
+- [x] [setup_ceo_user.py](archiwum/stary_ceo_user/setup_ceo_user.py) (od Fazy 4 w archiwum): poprawna ścieżka do `sql_files/`, podział batchy po liniach `GO`, kod wyjścia ≠ 0 przy błędach.
 - [x] [requirements.txt](requirements.txt) z wersjami.
 - [x] Pakiet [anomaly/](anomaly/) z podkatalogami `generator/`, `execution/`, `features/`, `models/`, `evaluation/`; wspólne ścieżki w [anomaly/paths.py](anomaly/paths.py). Uruchamianie: `python -m anomaly.<moduł>` z katalogu głównego.
 - [x] Stare wyniki i dane przeniesione do [archiwum/](archiwum/README.md) z opisem, dlaczego są nieaktualne.
@@ -50,7 +50,7 @@ Cel: każde zdarzenie z XE da się w 100% deterministycznie powiązać z wiersze
 
 **Przyjęty podział** (decyzja z 25.11): z logów XE pochodzą wszystkie fakty obserwowalne (metryki wykonania, tekst SQL, host, urządzenie, IP); z generatora wyłącznie **czas symulowany i etykiety** (kolumny `gt_*`).
 
-- [x] **Generator nadaje identyfikatory** ([CEOLogGenerator.py](anomaly/generator/CEOLogGenerator.py)): `run_id` (`<split>-s<seed>`), `event_uid` (`<run_id>-<nr>`), `incident_id`. Zapisuje `data/generated/events_<split>.csv` i `incidents_<split>.csv`. Kolumna `intensity` jest na razie pusta (wypełni ją Faza 3, D15).
+- [x] **Generator nadaje identyfikatory** (`CEOLogGenerator.py`, w Fazie 3 zastąpiony przez [dataset.py](anomaly/generator/dataset.py)): `run_id` (`<split>-s<seed>`), `event_uid` (`<run_id>-<nr>`), `incident_id`. Zapisuje `data/generated/events_<split>.csv` i `incidents_<split>.csv`. Kolumna `intensity` jest na razie pusta (wypełni ją Faza 3, D15).
 - [x] **W SQL tylko `EventUid`**: komentarz `/* gt:<EventUid> */` ([gt_tag.py](anomaly/execution/gt_tag.py)), bez etykiet, hosta, IP i czasu.
 - [x] **`APP` w connection stringu** ([SessionConnectionManager.py](anomaly/execution/SessionConnectionManager.py)): `SIM|run:<run_id>|dev:<urządzenie>|ip:<ip>`, bez `;` i `=`, bez etykiet. Host w `WSID`.
 - [x] **LOGGER** przepisany ([XeLogReader.cs](LOGGER/XeLogReader.cs), [XeEventRecord.cs](LOGGER/XeEventRecord.cs), [JsonExporter.cs](LOGGER/JsonExporter.cs)); usunięte `AnomalyFeatureRecord.cs` i `MLFeatureExporter.cs`:
@@ -69,8 +69,8 @@ Cel: każde zdarzenie z XE da się w 100% deterministycznie powiązać z wiersze
 **Znane ograniczenia przejściowe:**
 - eksperyment ML (`ml_anomaly_pipeline`) nadal czyta pliki generatora, a nie `data/joined/`; zmienia to Faza 5,
 - `eda_pipeline` czyta tylko stary format JSON (archiwum); przepisanie w Fazie 9,
-- health-check `SELECT 1` nadal generuje zdarzenia XE bez znacznika (LOGGER je pomija); usunięcie w Fazie 4,
-- `cleanup_simulation_data` nie działa (Faza 4). W tabeli Customer jest 849 rekordów symulacyjnych.
+- health-check `SELECT 1` nadal generuje zdarzenia XE bez znacznika (LOGGER je pomija); usunięcie w Fazie 4 ✅,
+- `cleanup_simulation_data` nie działa (Faza 4 ✅: zastąpione przywróceniem bazy z `.bak`).
 
 ### Faza 3: Generator: wiele ról, wielu użytkowników, poprawna norma ✅ (zakończona 25.11.2026)
 
@@ -101,21 +101,38 @@ Nowy generator w [anomaly/generator/](anomaly/generator/) zastąpił stary gener
 
 **Do Fazy 4 z tej fazy:** wykonawca musi obsłużyć nowy format (30 loginów `SIM_<ROLA>_<nr>`, `record_key` → `rowguid`, `parent_keys`, rekordy startowe). Do tego czasu `db_workload_executor` w trybie `--dry-run` działa, ale nie zna SQL dla nowych tabel ani UPDATE/DELETE.
 
-### Faza 4: SQL Server i wykonanie obciążenia
+### Faza 4: SQL Server i wykonanie obciążenia ✅ (zakończona 25.11.2026)
 
-- [ ] Skrypt SQL tworzący **role bazodanowe** (`CREATE ROLE`) z uprawnieniami z dokumentu oraz 30 loginów/użytkowników przypisanych do ról (zamiast jednego `create_ceo_user.sql`).
-- [ ] Dodać do bazy tabele, których dziś nie używa żaden profil (SalesOrderDetail, Address, CustomerAddress, ProductModel, ProductDescription, ProductCategory…), w szablonach SQL ([SQLQueryBuilder.py](anomaly/execution/SQLQueryBuilder.py)), łącznie z UPDATE/DELETE i JOIN-ami opisanymi w profilach.
-- [ ] Usuwanie/aktualizacja danych symulacyjnych: operacje UPDATE/DELETE muszą dotyczyć **rekordów symulacyjnych** (np. wstawionych wcześniej z markerem `SIM_`), żeby nie niszczyć bazy. Przed każdym przebiegiem przywracać bazę z `.bak` (powtarzalność metryk XE).
-- [ ] Naprawić `cleanup_simulation_data` ([DBWorkloadExecutor.py:153](anomaly/execution/DBWorkloadExecutor.py#L153)): złe argumenty, a CEO ma `DENY DELETE`. Wykonywać jako admin albo zastąpić restore’em z `.bak`.
-- [ ] Usunąć health-check `SELECT 1` przy każdym zapytaniu ([SessionConnectionManager.py:93](anomaly/execution/SessionConnectionManager.py#L93)), bo generuje zbędne zdarzenia.
-- [ ] Sesja XE: dodać `sql_statement_completed` lub pozostać przy batchach (udokumentować wybór). Każdy przebieg zapisywać do osobnego pliku `.xel` (`<RunId>.xel`).
-- [ ] **Jeden skrypt orkiestrujący** `run_experiment.py --seed N`: restore bazy → generator → wykonanie → odczekanie na flush XE → LOGGER → join → cechy. Wszystkie seedy przechodzą tę samą ścieżkę.
+Jedno polecenie przeprowadza ziarno przez cały łańcuch: `python -m anomaly.run_experiment --seed 11`.
 
-- [ ] **Format z Fazy 3** (D20): wykonawca czyta `record_key` i `parent_keys` z `events_<split>.csv`; klucz zamienia na deterministyczny `rowguid` (np. `uuid5(namespace, record_key)`), a UPDATE/DELETE i odwołania do rodziców robi po `rowguid` (każda tabela SalesLT ma unikalną kolumnę `rowguid`). Rodzic z `SalesOrderHeader` w INSERT pozycji przez podzapytanie po `rowguid`.
-- [ ] **Rekordy startowe:** przed każdym przebiegiem (po restore z `.bak`) wstawić `seed_records_<split>.csv` jako administrator, w kolejności rodzice → dzieci, z `rowguid` z klucza. Bez znacznika gt, więc LOGGER je pomija.
-- [ ] **30 loginów** `SIM_<ROLA>_<nr>` (lista w `data/generated/users.csv`), przypisanych do ról bazodanowych; hasła przez `config.local.json` / zmienne środowiskowe (Faza 1).
+| Moduł | Zawartość |
+|---|---|
+| [run_experiment.py](anomaly/run_experiment.py) | orkiestrator: generator → (dla każdego splitu) restore → role → rekordy startowe → XE → wykonanie → LOGGER → join; `run_summary.json` z czasami i hashem commita |
+| [db_admin.py](anomaly/execution/db_admin.py) | restore z `.bak`, 30 loginów, role `sim_<rola>` z `domain.PERMISSIONS`, rekordy startowe, sterowanie sesją XE; `--write-sql` → [sim_roles_and_users.sql](sql_files/sim_roles_and_users.sql) |
+| [SQLQueryBuilder.py](anomaly/execution/SQLQueryBuilder.py) | szablony SELECT (z JOIN-ami z dokumentu), INSERT, UPDATE, DELETE dla 10 tabel; `record_key` → `rowguid` (UUID v5) |
+| [DBWorkloadExecutor.py](anomaly/execution/DBWorkloadExecutor.py), [SessionConnectionManager.py](anomaly/execution/SessionConnectionManager.py) | wykonanie w kolejności czasu symulowanego, połączenie na sesję z loginem użytkownika, kontrola „zapis = 1 wiersz” |
 
-**Gotowe, gdy:** jeden seed przechodzi cały łańcuch bez ręcznych kroków, a pokrycie joinu = 100%.
+- [x] **Role bazodanowe** `sim_ceo`, `sim_cfo`, … z uprawnieniami 1:1 z dokumentu (tylko `GRANT`, bez `DENY`) i **30 loginów** `SIM_<ROLA>_<nr>`, każdy w jednej roli. Wspólne hasło w `config.local.json` (`sim_password`) albo `ANOMALY_SIM_PASSWORD`. Login `CEO_User` jest usuwany, a jego skrypty przeszły do [archiwum/stary_ceo_user/](archiwum/stary_ceo_user/).
+- [x] **Szablony SQL dla wszystkich tabel i operacji.** SELECT dołącza JOIN-em tylko tabele, które rola może czytać, z pominięciem rzadkich tabel użytkownika (D15). UPDATE i DELETE mają postać `WHERE rowguid = …`, a INSERT rekordu zależnego wyszukuje rodzica podzapytaniem po `rowguid`. Treść zapytania zależy tylko od `event_uid` i `record_key`.
+- [x] **Restore z `.bak` przed każdym przebiegiem** zamiast `cleanup_simulation_data` (usunięte). Potem role, użytkownicy i rekordy startowe (`seed_records_<split>.csv`, rodzice przed dziećmi), wstawiane jako administrator i sprawdzane po wstawieniu.
+- [x] Usunięty health-check `SELECT 1`; pula połączeń ODBC wyłączona, więc każda sesja generatora to osobne logowanie.
+- [x] **Sesja XE:** zostają `sql_batch_completed` (+ `rpc_completed`, `error_reported`), bo każda operacja to jeden batch; `sql_statement_completed` dublowałby zdarzenia i dodawał instrukcje wyzwalaczy. Każdy przebieg ma osobny plik `C:\XELogs\<run_id>__<czas>*.xel`. Tryb `ALLOW_SINGLE_EVENT_LOSS` z buforem 32 MB, bo SQL Server nie dopuszcza `NO_EVENT_LOSS` dla `error_reported`; ewentualną utratę wykrywa join (pokrycie 100%).
+- [x] **LOGGER:** nowe pole `TargetTable` (tabela główna zapytania; schemat `xe-export/v3`), domyślnie czyta `C:\XELogs\*.xel`, bez flagi `--ceo`. **Naprawiony błąd:** tekst SQL brany był z akcji `sql_text` (bufor wejściowy sesji); dla wewnętrznych wywołań RPC sterownika ODBC zawierała ona poprzedni batch ze znacznikiem gt, co dawało ok. 2,5 tys. zdublowanych `EventUid` na przebieg TRAIN. Teraz tekst pochodzi z pola zdarzenia (`batch_text` / `statement`).
+- [x] **xe_join:** 12. kontrola `TargetTable == target_table`; wynik per split i ziarno. **Naprawiony błąd z Fazy 2:** tabela połączona miała dwie kolumny `operation_type` (z XE i z generatora); teraz każda kolumna kontekstu występuje raz, z wartością z XE.
+- [x] **Dane per ziarno:** `data/seed_<N>/{generated, xe, joined}` i `run_summary.json`. Wcześniej każde ziarno nadpisywałoby pliki poprzedniego.
+- [x] Testy: [tests/test_sql_builder.py](tests/test_sql_builder.py). Dla wszystkich ok. 31 tys. operacji ziarna 11 sprawdza zgodność z uprawnieniami, tabelę docelową, `rowguid`, rodziców i JOIN-y; sprawdza też role i loginy. Łącznie 42 testy.
+
+**Sprawdzone na bazie (25.11.2026, ziarno 11, pełny łańcuch jednym poleceniem, 6,7 min):**
+
+| Przebieg | Operacje | Sesje | Rekordy startowe | Błędy SQL | Zapis ≠ 1 wiersz | Zapytań/s | Join |
+|---|---|---|---|---|---|---|---|
+| train-s11 | 13 559 | 2 700 | 1 509 | 0 | 0 | 104 | 13 559 (100%) |
+| validation-s11 | 8 328 | 1 496 | 1 114 | 0 | 0 | 88 | 8 328 (100%) |
+| test-s11 | 8 848 | 1 440 | 1 091 | 0 | 0 | 93 | 8 848 (100%) |
+
+Wszystkie 12 kontroli joinu OK. Restore 1–4 s, rekordy startowe 10–14 s, LOGGER 2–3 s na przebieg. JOIN-y stanowią 9–15% zapytań każdej roli. Mediana odczytów logicznych to 37, a liczby wierszy 1–2.
+
+**Do następnych faz:** pozostałe ziarna (22, 33, 44, 55) uruchamia się tym samym poleceniem (ok. 7 min każde). Faza 5 czyta `data/seed_<N>/joined/joined_<split>.csv`; cechy grupy Zasoby liczy z `target_table` (METODOLOGIA D14).
 
 ### Faza 5: Inżynieria cech (okna czasowe)
 
@@ -221,8 +238,10 @@ Obecnie w repozytorium nie ma projektu WPF.
 | `SqlTextLength` zawiera komentarz z etykietą | `XeLogReader.cs` | 2 |
 | Błąd SQL daje 2 rekordy | `XeLogReader.cs` | 2 |
 | `APP=` ucinane na `;` | `SessionConnectionManager.py` | 2 |
-| Health-check `SELECT 1` przy każdym zapytaniu | `SessionConnectionManager.py` | 4 |
-| `cleanup_simulation_data` zawsze się wywala | `DBWorkloadExecutor.py` | 4 |
+| Health-check `SELECT 1` przy każdym zapytaniu | `SessionConnectionManager.py` | 4 ✅ |
+| `cleanup_simulation_data` zawsze się wywala | `DBWorkloadExecutor.py` (zastąpione restore’em) | 4 ✅ |
+| Zdublowane `EventUid` z `rpc_completed` (tekst z akcji `sql_text`) | `XeLogReader.cs` | 4 ✅ |
+| Dwie kolumny `operation_type` w tabeli połączonej | `xe_join.py` | 4 ✅ |
 | Zła ścieżka SQL w `setup_ceo_user.py` | `setup_ceo_user.py` | 1 |
 | MAD = 0 → eksplozja z-score (FPR 87%) | `RobustZScoreDetector.py` | 6 |
 | Grupa `operations` pominięta w ablacji | `ml_anomaly_pipeline.py` | 7 |
