@@ -76,7 +76,8 @@ class SessionConnectionManager:
         conn = self._active.get(session_id)
         if conn is None:
             import pyodbc
-            pyodbc.pooling = False          # każda sesja to osobne logowanie (bez sp_reset_connection)
+            if pyodbc.pooling:              # wyłączana w anomaly/execution/__init__.py przed 1. połączeniem
+                raise RuntimeError("Pula połączeń ODBC jest włączona: sesje generatora współdzieliłyby połączenia.")
             conn = pyodbc.connect(self.build_connection_string(
                 login_name, client_hostname, device_context, simulated_ip, run_id), autocommit=True)
             self._active[session_id] = conn

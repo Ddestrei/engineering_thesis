@@ -83,7 +83,7 @@ def _fake_xe(gt: pd.DataFrame) -> pd.DataFrame:
         "PhysicalTimestamp": "2026-11-25T18:00:00+01:00",
         "EventSequence": range(len(gt)),
         "SessionId": 60,
-        "ClientConnectionId": "00000000-0000-0000-0000-000000000000",
+        "ClientConnectionId": "conn-" + gt["session_id"].astype(str),     # jedno połączenie na sesję
         "Username": gt["login_name"],
         "HostName": gt["client_hostname"],
         "ClientAppName": "SIM|...",
@@ -136,6 +136,7 @@ def test_join_ignores_other_runs(gt):
     (lambda xe: xe.assign(Result=["Error"] + ["OK"] * (len(xe) - 1)), "wynikiem OK"),
     (lambda xe: xe.assign(AppDevice="Rogue_Device"), "AppDevice"),
     (lambda xe: xe.assign(TargetTable="ProductCategory"), "TargetTable"),
+    (lambda xe: xe.assign(ClientConnectionId="pooled-connection"), "jedno połączenie XE"),
     (lambda xe: pd.concat([xe, xe.head(1).assign(EventUid=xe["EventUid"].iloc[0][:-6] + "999999")]), "brak sierot"),
 ])
 def test_join_rejects_damaged_runs(gt, damage, failed_check):

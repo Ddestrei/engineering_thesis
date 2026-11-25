@@ -187,6 +187,14 @@ def validate_and_join(xe_events: pd.DataFrame, xe_errors: pd.DataFrame, gt: pd.D
         report.add(f"zgodność kontekstu: XE.{xe_col} == generator.{gt_col}",
                    [f"{r['EventUid']}: XE='{r[xe_col]}' generator='{r[gt_col]}'" for _, r in bad.iterrows()])
 
+    # Sesja generatora = dokładnie jedno połączenie w XE i odwrotnie (bez puli połączeń). Cechy sesji
+    # (D14: session_count, ops_per_session) liczone są z client_connection_id, więc musi to zachodzić.
+    conn_per_session = merged.groupby("session_id")["ClientConnectionId"].nunique()
+    session_per_conn = merged.groupby("ClientConnectionId")["session_id"].nunique()
+    report.add("sesja generatora = jedno połączenie XE (bez puli połączeń)",
+               [f"sesja {s}: {n} połączeń" for s, n in conn_per_session[conn_per_session != 1].items()]
+               + [f"połączenie {c}: {n} sesji generatora" for c, n in session_per_conn[session_per_conn != 1].items()])
+
     if not report.ok:
         return pd.DataFrame(), report
 
