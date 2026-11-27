@@ -276,20 +276,41 @@ Protokół spisany przed pierwszym uruchomieniem TEST jako **METODOLOGIA D21** (
 | H4′ / RQ5 | wyniki per klasa × intensywność | anomalie silne: reguły ≈ ML (różnica MCC w granicach CI); anomalie słabe: statystyka/ML > reguły (PR-AUC) |
 | H5 / RQ6 | ranking (relewancja według D19) | RiskScore istotnie lepszy w P@K/NDCG@K niż chronologia i niż sam anomaly score |
 
-### Faza 8: Panel WPF (wymaganie inżynierskie)
+### Faza 8: Panel WPF (wymaganie inżynierskie) ✅ (27.11.2026)
 
-Obecnie w repozytorium nie ma projektu WPF.
+Panel czyta gotowe wyniki TEST z bazy `AnomalyResults`. Nic nie liczy od nowa: score'y, alarmy i RiskScore pochodzą z Fazy 7, a hiperparametry, progi i parametry robust/reguł z zamrożonej konfiguracji Fazy 6.
 
-- [ ] Wyniki pipeline’u zapisywać do bazy (osobna baza, np. `AnomalyResults`): tabele `Runs`, `Windows`, `WindowFeatures`, `Alerts`, `Incidents`, `Models`.
-- [ ] Projekt WPF (.NET 9, MVVM), funkcje zgodne z oceną:
-  - lista alertów sortowana po RiskScore,
-  - filtry: użytkownik, rola, zakres czasu, klasa anomalii, poziom ryzyka,
-  - szczegóły alertu: cechy, które najbardziej odbiegały od normy (np. największe |z| z robust), oraz porównanie z profilem normalnym użytkownika,
-  - model i próg, który wygenerował alert,
-  - ścieżka alertu: okno → zdarzenia XE → tekst SQL,
-  - eksport raportu (PDF/CSV),
-  - pomiar czasu ładowania i czasu zapytań SQL.
-- [ ] Testy inżynierskie panelu: poprawność filtrowania (testy jednostkowe ViewModeli), czas ładowania dla N alertów, stabilność.
+| Element | Plik | Zawartość |
+|---|---|---|
+| Schemat bazy | [sql_files/anomaly_results_schema.sql](sql_files/anomaly_results_schema.sql) | `Runs`, `Models`, `Thresholds`, `Windows`, `WindowFeatures`, `Alerts`, `Incidents`, `Events` (idempotentny) |
+| Eksport | [anomaly/export/results_db.py](anomaly/export/results_db.py) | jedna transakcja na ziarno, ponowny eksport zastępuje przebieg; kontrole: SHA-256 konfiguracji = manifest ewaluacji, okna score'ów = okna cech, norm alertu ≥ próg grupy, każde zdarzenie ma okno |
+| Dane, filtry, ViewModele, eksport | [PANEL/AnomalyPanel.Core](PANEL/AnomalyPanel.Core) | Dapper + Microsoft.Data.SqlClient, CommunityToolkit.Mvvm, QuestPDF (licencja Community); bez zależności od WPF, więc ViewModele są testowalne |
+| Okno | [PANEL/AnomalyPanel](PANEL/AnomalyPanel) | WPF .NET 9, MVVM |
+| Testy | [PANEL/AnomalyPanel.Tests](PANEL/AnomalyPanel.Tests), [tests/test_results_db.py](tests/test_results_db.py) | xUnit 40 (37 jednostkowych, 3 integracyjne na bazie), pytest 4 |
+
+- [x] Baza wyników `AnomalyResults` (TEST, konfiguracja `full`, 5 ziaren): 8 080 okien, 75 modeli, 5 488 alertów, 727 200 wartości cech, 43 652 zdarzenia XE, 371 incydentów; eksport ok. 10 s na ziarno. Liczba alertów i TP każdego modelu zgadza się z metrykami Fazy 7 (75/75).
+- [x] Lista alertów modelu (wybór: ziarno, wariant, detektor) sortowana według RiskScore; przełącznik: score detektora (D8: norm, potem nadwyżka ogona) i chronologia; remisy chronologicznie (D21).
+- [x] Filtry: użytkownik, rola, zakres dni, klasa anomalii (ground truth, w tym „norma” = fałszywe alarmy i „trudna norma”), minimalny poziom ryzyka.
+- [x] **Poziomy ryzyka** (tylko do prezentacji, nie wchodzą do ewaluacji): niski < 0,70 ≤ średni < 0,80 ≤ wysoki < 0,90 ≤ krytyczny. Progi ustalone z góry; RiskScore alertu leży w [0,6; 1], a progi dzielą go mniej więcej na kwartyle alertów TEST.
+- [x] Szczegóły alertu: składniki RiskScore z wkładem do wyniku i flagami kontekstu; model, hiperparametry, grupa i wartość progu głównego, metryki VAL progu; cechy o największym |z| robust (D12) z wartością, medianą i [P1; P99] jednostki modelu (TRAIN), medianą użytkownika (TRAIN) i naruszeniem reguły D13.
+- [x] Ścieżka alertu: okno → zdarzenia XE (czas, operacja, tabela, czas wykonania, odczyty, wiersze) → tekst SQL i pola XE (event_uid, numer zdarzenia, czas fizyczny, połączenie, login, host, urządzenie/IP); ścieżka do eksportu LOGGER-a.
+- [x] Eksport: CSV bieżącej kolejki (RFC 4180, kropka dziesiętna) i raport PDF (model, wersja konfiguracji, filtry, kolejka, szczegóły wybranego alertu ze zdarzeniami i SQL); CSV pomiarów czasu.
+- [x] Pomiar czasu: każde zapytanie SQL, ładowanie kolejki, szczegóły alertu, eksport, start aplikacji (zakładka „Pomiary czasu”, pasek stanu).
+- [x] Testy inżynierskie: poprawność filtrowania i sortowania (w tym remisy i granice poziomów), ViewModele (ładowanie, filtry, zmiana modelu, wyścig wolnego i szybkiego ładowania, błąd bazy, szczegóły, eksport), zgodność filtrów w pamięci z `WHERE` w SQL, ścieżka alertu do zdarzeń XE na prawdziwej bazie, czas dla N alertów, stabilność (300 cykli przeładowanie/filtr/wybór).
+
+**Pomiary** (laptop deweloperski, SQL Server lokalnie):
+
+| Operacja | Czas |
+|---|---|
+| Zapytanie o alerty modelu (75 modeli) | mediana 6 ms, maks. 19 ms |
+| Ładowanie kolejki w panelu (119 alertów, z SQL) | 95–130 ms przy pierwszym połączeniu, potem ok. 35 ms |
+| Szczegóły alertu (cechy + zdarzenia + incydenty) | 19–100 ms |
+| Start aplikacji do pierwszej kolejki | ok. 1,9 s |
+| Filtrowanie i sortowanie w pamięci, N = 1 000 / 10 000 / 50 000 | 4 / 2 / 5 ms |
+| Ładowanie kolejki w ViewModelu, N = 10 000 (bez SQL) | 34 ms |
+| Stabilność: 300 cykli | przyrost pamięci zarządzanej 1,1 MB, bez błędów |
+
+**Poprawka po drodze:** domyślny parser `pandas.read_csv` zmieniał ostatni bit części score'ów zapisanych w CSV (norm alertu wychodził o 1 ULP poniżej progu). Metryk Fazy 7 to nie dotyczy, bo liczono je w pamięci przed zapisem. Eksporter czyta CSV z `float_precision="round_trip"` i sprawdza „norm alertu ≥ próg”. Błąd wykrył test integracyjny panelu.
 
 ### Faza 9: EDA, raporty i tekst pracy
 
@@ -317,7 +338,7 @@ Obecnie w repozytorium nie ma projektu WPF.
 | Behawior vs naruszenia polityki | ŚREDNI | D3: naruszenia wyłączone z zakresu pracy; H3/H4 przeformułowane (METODOLOGIA, sekcja C) |
 | Definicja opóźnienia | ŚREDNI | D9, Faza 7 |
 | Walidacja zewnętrzna | – | Faza 9 (ograniczenia) |
-| WPF | NISKI | Faza 8 |
+| WPF | NISKI | Faza 8 ✅ |
 
 ## 4. Mapa: błędy znalezione w kodzie → zadania
 

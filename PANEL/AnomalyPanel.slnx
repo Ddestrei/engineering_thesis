@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="AnomalyPanel.Core/AnomalyPanel.Core.csproj" />
+  <Project Path="AnomalyPanel/AnomalyPanel.csproj" />
+  <Project Path="AnomalyPanel.Tests/AnomalyPanel.Tests.csproj" />
+</Solution>

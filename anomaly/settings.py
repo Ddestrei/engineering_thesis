@@ -25,6 +25,7 @@ DEFAULT_SETTINGS = {
     "backup_file": None,          # None = <domyślny katalog kopii serwera>\AdventureWorksLT2025.bak
     "xe_session": "AW2025_Behavioral_Anomaly_Session",
     "xe_dir": r"C:\XELogs",       # katalog plików .xel (zapisuje je usługa SQL Server)
+    "results_database": "AnomalyResults",   # baza wyników dla panelu WPF (Faza 8)
 }
 
 

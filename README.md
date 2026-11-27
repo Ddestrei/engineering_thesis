@@ -8,7 +8,7 @@ Praca inżynierska: porównanie metod regułowych, statystycznych i uczenia masz
 - [PLAN_NAPRAWCZY.md](PLAN_NAPRAWCZY.md): zadania w kodzie, w kolejności faz.
 - `Ocena_projektu_system_wykrywania_anomalii_SQL_WPF.docx`: ocena zewnętrzna, na którą odpowiadają dwa powyższe pliki.
 
-> **Stan:** trwa realizacja planu naprawczego (Fazy 1–7 zakończone; wyniki TEST w PLAN_NAPRAWCZY.md, Faza 7). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth → okna UserId × 30 min z cechami D14. Detektory (Faza 6) uczy się i stroi na VAL, a ewaluację na TEST (Faza 7) robi się z zamrożonych plików osobnymi poleceniami; docelowy łańcuch opisuje METODOLOGIA.md.
+> **Stan:** trwa realizacja planu naprawczego (Fazy 1–8 zakończone; wyniki TEST w PLAN_NAPRAWCZY.md, Faza 7; panel WPF: Faza 8). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth → okna UserId × 30 min z cechami D14. Detektory (Faza 6) uczy się i stroi na VAL, a ewaluację na TEST (Faza 7) robi się z zamrożonych plików osobnymi poleceniami; docelowy łańcuch opisuje METODOLOGIA.md.
 
 ## Struktura repozytorium
 
@@ -23,15 +23,18 @@ anomaly/                  pakiet Pythona
   features/               połączenie logów XE z ground truth (xe_join), okna i cechy D14 (windowing)
   models/                 detektory (reguły, robust, IF, OCSVM, LOF), normalizacja D8, progi D7, strojenie na VAL
   evaluation/             ablacja, scoring z zamrożonej konfiguracji, metryki, RiskScore, statystyka, raport
+  export/                 eksport wyników do bazy AnomalyResults dla panelu (results_db)
 LOGGER/                   program .NET 9: plik .xel (Extended Events) -> JSON (surowe fakty + EventUid)
-sql_files/                sesja Extended Events, role i loginy (sim_roles_and_users.sql, generowany)
+PANEL/                    panel analityczny WPF (.NET 9): AnomalyPanel.Core (dane, filtry, ViewModele, eksport),
+                          AnomalyPanel (okno WPF), AnomalyPanel.Tests (xUnit)
+sql_files/                sesja Extended Events, role i loginy (sim_roles_and_users.sql, generowany), schemat bazy wyników
 PREZENTACJE/              prezentacje
 archiwum/                 nieaktualne wyniki sprzed planu naprawczego (patrz archiwum/README.md)
 data/seed_<N>/            [generowane, poza gitem] generated/ (ground truth), xe/ (LOGGER), joined/ (połączone),
                           features/ (okna i cechy), run_summary.json (czasy, statystyki, wersja kodu)
 results/seed_<N>/         [generowane, poza gitem] detectors/<konfiguracja>/ (zamrożona konfiguracja, modele),
                           evaluation/<split>/ (score'y, metryki, incydenty); results/summary/<split>/ (zbiorczo, RAPORT.md)
-tests/                    testy jednostkowe (python -m pytest)
+tests/                    testy jednostkowe Pythona (python -m pytest)
 ```
 
 ## Przygotowanie środowiska
@@ -103,8 +106,19 @@ python -m anomaly.evaluation.evaluate --split test --seed 11 22 33 44 55 --summa
 
 Wynik zbiorczy: `results/summary/<split>/` (`RAPORT.md`, `metrics_summary.csv`, `comparisons.csv`, `hypotheses.json`, `performance.csv`, `manifest.json`). Poprzedni eksperyment ML i EDA na cechach per zdarzenie są w `archiwum/stary_pipeline/`.
 
+**Panel analityczny WPF** (Faza 8). Najpierw eksport wyników TEST do bazy `AnomalyResults` na tym samym serwerze (Windows Authentication, bez haseł; baza i tabele powstają przy pierwszym uruchomieniu ze skryptu `sql_files/anomaly_results_schema.sql`, ponowny eksport zastępuje dane przebiegu):
+
+```bash
+python -m anomaly.export.results_db --seed 11 22 33 44 55          # domyślnie --split test --config full
+dotnet run --project PANEL/AnomalyPanel
+```
+
+Połączenie panelu: `PANEL/AnomalyPanel/appsettings.json` albo zmienna środowiskowa `ANOMALY_RESULTS_CONNECTION`. Panel pokazuje kolejkę alertów modelu (domyślnie One-Class SVM per rola, sortowanie według RiskScore; przełącznik: score detektora D8, chronologia), filtry (użytkownik, rola, zakres dni, klasa anomalii z ground truth, poziom ryzyka), wyjaśnienie alertu (składniki RiskScore, model, hiperparametry i próg grupy, cechy o największym |z| robust na tle profilu z TRAIN), ścieżkę okno → zdarzenia XE → tekst SQL, eksport CSV i raport PDF oraz pomiary czasu zapytań SQL i ładowania widoków.
+
 ## Testy
 
 ```bash
 python -m pytest
+dotnet test PANEL/AnomalyPanel.slnx                                    # panel: jednostkowe + integracyjne (wymagają bazy AnomalyResults)
+dotnet test PANEL/AnomalyPanel.slnx --filter "Category!=Integration"  # panel: bez bazy
 ```

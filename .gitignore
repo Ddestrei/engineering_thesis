@@ -9,6 +9,10 @@ venv/
 LOGGER/bin/
 LOGGER/obj/
 LOGGER/.vs/
+PANEL/**/bin/
+PANEL/**/obj/
+PANEL/.vs/
+PANEL/**/TestResults/
 *.user
 *.suo
 
