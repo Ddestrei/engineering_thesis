@@ -55,6 +55,8 @@ FEATURE_GROUPS: Dict[str, List[str]] = {
     "execution": ["sum_logical_reads", "sum_rows", "mean_duration", "avg_join_count", "avg_sql_length"],
 }
 ROLE_COLUMNS = [f"role_{r}" for r in ROLES]          # grupa Kontekst, tylko wariant global (D14)
+# Cechy binarne (0/1); baseline robust (D12) liczy z-score tylko dla cech ciągłych.
+BINARY_FEATURES = ["is_weekend", "after_hours_flag", "new_table_flag", "ip_known_flag"] + ROLE_COLUMNS
 GROUP_LABELS = {"time": "Czas", "volume": "Wolumen", "context": "Kontekst",
                 "ratios": "Proporcje operacji", "resources": "Zasoby", "execution": "Wykonanie"}
 

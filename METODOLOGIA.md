@@ -69,6 +69,11 @@ Okresy następują po sobie chronologicznie i nie nakładają się.
 - **Drugi punkt pracy, tylko dla H1:** próg dobrany na VAL tak, aby recall = 0,80. Na TEST porównywany jest FPR wariantów global / per rola / per użytkownik przy tej samej czułości. Jest to konieczne, bo przy głównym progowaniu (FPR ≤ 5%) wszystkie warianty mają FPR bliski 5% z konstrukcji, więc hipotezy „niższy FPR przy porównywalnej czułości” nie dałoby się na nim sprawdzić.
 - **Kryterium RQ1** (ustalone a priori): profil normy uznaje się za zachowujący akceptowalny poziom fałszywych alarmów, jeżeli na TEST przy głównym progu średni FPR ≤ 5%, a średni recall ≥ 0,50.
 
+- **Hiperparametry (IF, OCSVM, LOF)** wybierane są na VAL według **PR-AUC** na połączonych, znormalizowanych (D8) score’ach wariantu. Jest jeden zestaw na wariant, wspólny dla wszystkich jego jednostek, bo jeden użytkownik ma w VAL tylko kilka okien anomalnych. Siatka: IF `n_estimators` {100, 300} × `max_samples` {64, 128, 256}; OCSVM (RBF) `nu` {0,01, 0,05, 0,1} × `gamma` {0,3, 1, 3} × `'scale'`; LOF (`novelty=True`) `n_neighbors` {5, 10, 20, 35}. `max_samples` i `n_neighbors` są przycinane do liczby okien TRAIN jednostki. Skalowanie (`StandardScaler`) dopasowywane jest na TRAIN jednostki, `random_state` = ziarno (D6).
+- **Szczegóły progu:** alarm, gdy `norm_score ≥ próg`. Przy remisie MCC wybierany jest wyższy próg. Dopuszczalny jest też próg „brak alarmów”, gdy żaden inny nie spełnia FPR ≤ 5%. Punkt recall = 0,80 to najwyższy próg z recall ≥ 0,80 na VAL.
+- **Zastępstwo z D12** (< 30 okien TRAIN → okna roli) dotyczy w wariancie per użytkownik wszystkich detektorów, nie tylko robust.
+- **Rozdzielenie od TEST:** kod Fazy 6 nie czyta plików TEST. Konfiguracja (hiperparametry, parametry dopasowania, normalizacja, progi) zapisywana jest do `frozen_config.json` z sumą SHA-256, a modele do plików `.joblib`; scoring TEST (Faza 7) korzysta wyłącznie z nich.
+
 **Uzasadnienie:** jeden użytkownik ma około 40 normalnych okien w VAL. Próg „FPR ≤ 5%” wyznaczony na 40 oknach zależy od 2 obserwacji i jest losowy. Pula roli (około 200 okien) daje stabilny próg. Wartość 5% to robocza definicja „akceptowalnego poziomu fałszywych alarmów” z RQ1.
 
 ### D8. Kierunek i normalizacja score’u
@@ -76,6 +81,8 @@ Okresy następują po sobie chronologicznie i nie nakładają się.
 - Normalizacja do [0, 1] jest liczona na **normalnych oknach VAL** danej jednostki modelowania (globalnie, per rola albo per użytkownik), wygładzoną dystrybuantą empiryczną z przedłużonym ogonem:
   - dla s ≤ s_max: `norm(s) = rank(s) / (n + 1)`,
   - dla s > s_max: `norm(s) = 1 − (1 / (n + 1)) · exp(−(s − s_max) / σ)`, gdzie σ to odporna skala (MAD · 1,4826) score’ów referencyjnych.
+  - Gdy MAD score’ów referencyjnych = 0 (np. reguły: w normie prawie zawsze 0), σ = IQR / 1,349, potem odchylenie standardowe, a na końcu 1. Bez skali zastępczej ogon byłby nieskończenie stromy.
+  - Dla s − s_max > ok. 33 σ wartość `norm(s)` zaokrągla się w arytmetyce float64 do 1,0. Kolejność według D8 zachowuje się wtedy, rozstrzygając remisy nadwyżką ogona `(s − s_max) / σ`, porównywalną między jednostkami.
 
 **Uzasadnienie:**
 - Zwykła ECDF z TRAIN nada wartość 1,0 każdemu oknu powyżej maksimum treningowego, czyli prawie wszystkim anomaliom. Najwyżej oceniane alerty remisowałyby wtedy ze sobą, a Precision@K/NDCG@K (H5) straciłyby sens. Przedłużony ogon zachowuje kolejność.
@@ -123,6 +130,8 @@ Wagi ustalone a priori i niezmieniane po obejrzeniu wyników TEST. Składniki po
 - **Gdy MAD = 0:** `s = IQR / 1,349`. Gdy i to jest 0: `s = max(10⁻³, 0,01 · (P99 − P1))`, a jeśli cecha jest w TRAIN całkowicie stała, `s = 1` w jednostkach cechy. Odchylenie od cechy zawsze stałej (np. `delete_ratio` = 0) pozostaje wtedy sygnałem, ale nie eksploduje.
 - `z_j = |x_j − m_j| / s_j`. **Score okna = średnia z 3 największych z_j.**
 - Model per użytkownik z mniej niż 30 oknami w TRAIN używa statystyk roli.
+- **Cechy ciągłe** to wszystkie cechy D14 poza binarnymi (`is_weekend`, `after_hours_flag`, `new_table_flag`, `ip_known_flag`, one-hot roli). Udziały urządzeń i operacji są ciągłe. Skala poniżej 10⁻⁹ · max(1, |mediana|) traktowana jest jak 0 (szum zmiennoprzecinkowy, np. `hour_sin`), żeby nie dawała z rzędu 10¹⁵.
+- **Obserwacja z VAL (ziarno 11):** dla cech prawie stałych w TRAIN (np. udziały urządzeń, `delete_ratio`, `rare_resource_score` per użytkownik) poziom `0,01 · (P99 − P1)` daje z rzędu 100, a przy P99 = P1 (skala 10⁻³) nawet 1000. Wariant łagodniejszy (`(P99 − P1) / 4,653`, skala zgodna z rozkładem normalnym) nie był na VAL jednoznacznie lepszy: PR-AUC wyniosło 0,26 wobec 0,15 dla wariantu global, ale 0,27 wobec 0,40 dla wariantu per rola. Dlatego D12 pozostaje bez zmian, a obserwacja trafia do analizy wyników.
 
 **Uzasadnienie:** mediana i MAD są odporne na wartości skrajne (Iglewicz & Hoaglin, 1993). Średnia z top-3 jest mniej wrażliwa na przypadkowe odchylenie jednej cechy niż maksimum. W obecnej wersji kodu maksimum z MAD ≈ 0 dawało FPR 87%.
 
@@ -297,3 +306,4 @@ H1, H2 i H5 pozostają bez zmian.
 | 25.11.2026 | – | wersja początkowa | – |
 | 25.11.2026 | D11, D14, D20 | Faza 4: restore z `.bak` przed przebiegiem, `TargetTable` jako źródło cech Zasoby, adresowanie po `rowguid`, tryb utraty zdarzeń XE | doprecyzowanie przed pierwszym uruchomieniem na TEST (wynika z implementacji, nie z wyników) |
 | 27.11.2026 | D14 | Faza 5: `avg_query_complexity` rozbite na `avg_join_count` i `avg_sql_length` (grupa Wykonanie ma 5 cech); spisane definicje cech względnych (`hour_rarity`, `after_hours_flag` z [P1, P99] godzin TRAIN, `rare_resource_score` jako suma po operacjach na tabelach o udziale < 5%, `volume_ratio_to_median`, `new_table_flag`, `ip_known_flag`); `device_type` jako udziały 4 typów urządzeń | D14 nie definiował tych cech jednoznacznie, a `avg_query_complexity` łączyło dwie wielkości w różnych jednostkach. Ustalone przed uczeniem jakiegokolwiek detektora, bez oglądania wyników |
+| 27.11.2026 | D7, D8, D12 | Faza 6: kryterium wyboru hiperparametrów (PR-AUC na VAL) i siatka; zasady remisu i progu „brak alarmów”; zastępstwo D12 dla wszystkich detektorów; σ zastępcze w D8 i rozstrzyganie remisów na 1,0; definicja cech ciągłych i tolerancja numeryczna w D12 | D7, D8 i D12 nie określały tych przypadków. Uzupełnione przed jakimkolwiek scoringiem TEST. Kaskada D12 bez zmian mimo obserwacji z VAL (patrz D12) |

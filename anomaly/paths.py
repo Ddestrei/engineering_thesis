@@ -106,3 +106,27 @@ def reference_json(variant: str, seed: int) -> Path:
 
 def features_report_json(seed: int) -> Path:
     return features_dir(seed) / "features_report.json"
+
+
+# --- wyniki detektorów (Faza 6) ----------------------------------------------------------
+# results/seed_<N>/detectors/<konfiguracja>/   konfiguracja = "full" albo nazwa zestawu ablacji (Faza 7)
+
+def results_seed_dir(seed: int) -> Path:
+    return RESULTS_DIR / f"seed_{seed}"
+
+
+def detectors_dir(seed: int, config: str = "full") -> Path:
+    return results_seed_dir(seed) / "detectors" / config
+
+
+def frozen_config_json(seed: int, config: str = "full") -> Path:
+    """Hiperparametry, normalizacja i progi zamrożone przed TEST (D7)."""
+    return detectors_dir(seed, config) / "frozen_config.json"
+
+
+def models_joblib(variant: str, detector: str, seed: int, config: str = "full") -> Path:
+    return detectors_dir(seed, config) / "models" / f"{variant}_{detector}.joblib"
+
+
+def val_scores_csv(variant: str, seed: int, config: str = "full") -> Path:
+    return detectors_dir(seed, config) / f"val_scores_{variant}.csv"

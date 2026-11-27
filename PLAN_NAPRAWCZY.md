@@ -170,18 +170,50 @@ Tempo ok. 20 zapytań/s wynika z braku puli połączeń: każde logowanie logine
 
 **Do Fazy 6:** detektory czytają `windows_<wariant>_<split>.csv` i kolumny z `feature_columns(wariant, grupy)`; jednostka modelowania to kolumna `RoleId` albo `UserId`. Na TRAIN cechy względne są liczone w próbie (okno należy do własnej normy), co dla detektorów uczonych na TRAIN jest zgodne z D12/D13.
 
-### Faza 6: Detektory i progowanie
+### Faza 6: Detektory i progowanie ✅ (zakończona 27.11.2026)
 
-- [ ] **Reguły** ([RuleBasedDetector.py](anomaly/models/RuleBasedDetector.py)): przepisać według D13. 4 reguły z progami z percentyli TRAIN danej jednostki modelowania, score = liczba naruszonych reguł. Obecne reguły (noc, weekend, nieznane urządzenie, błąd, UPDATE/DELETE) wyrzucić; część z nich dotyczy naruszeń, które są poza zakresem (D3).
-- [ ] **Robust statistics** ([RobustZScoreDetector.py](anomaly/models/RobustZScoreDetector.py)): przepisać według D12. Mediana + MAD per jednostka modelowania, kaskada zastępczych skal przy MAD = 0 (bez wykluczania cech stałych), score = średnia z 3 największych |z|, statystyki roli dla użytkowników z < 30 oknami w TRAIN.
-- [ ] **Isolation Forest / One-Class SVM / LOF (`novelty=True`, już jest)**: hiperparametry z siatki strojonej na VAL (IF: `n_estimators`, `max_samples`; OCSVM: `nu`, `gamma`; LOF: `n_neighbors`). Skalowanie dopasowywane tylko na TRAIN.
-- [ ] **Wspólny interfejs**: każdy detektor ma `fit(train) → score(X)`, gdzie większy score oznacza większe ryzyko, oraz normalizację do [0,1] według D8 (wygładzona ECDF na normalnych oknach VAL z przedłużonym ogonem).
-- [ ] **Progowanie** ([ThresholdTuner.py](anomaly/models/ThresholdTuner.py)) według D7:
-  - główny punkt pracy: FPR ≤ 5% na VAL, w ramach tego maksymalne MCC (dziś domyślny jest tryb `mcc` bez ograniczenia FPR, przez co FPR na teście wynosił 31–87%),
-  - dla modeli per użytkownik próg wspólny dla roli, na połączonych i znormalizowanych (D8) score’ach VAL,
-  - drugi punkt pracy dla H1: próg dający recall = 0,80 na VAL,
-  - progi, hiperparametry i parametry normalizacji zapisywane do pliku przed uruchomieniem TEST.
-- [ ] **Trzy warianty modelowania (RQ4/H1)**: global (wszyscy użytkownicy), per rola, per użytkownik. Te same cechy i ta sama procedura progowania.
+| Plik | Zawartość |
+|---|---|
+| [detectors.py](anomaly/models/detectors.py) | wspólny interfejs `fit(X_train, features)` → `score(X)` (większy = większe ryzyko); reguły D13, robust D12, IF, OCSVM, LOF; siatka hiperparametrów |
+| [scoring.py](anomaly/models/scoring.py) | normalizacja D8 (`ScoreNormalizer`), progi D7 (FPR ≤ 5% + max MCC, recall = 0,80), `rank_key` do sortowania alertów |
+| [training.py](anomaly/models/training.py) | warianty D17, uczenie na TRAIN, strojenie na VAL, zamrożenie konfiguracji; `python -m anomaly.models.training --seed 11 22 33 44 55` |
+
+- [x] **Reguły** (D13): 4 reguły z percentyli okien TRAIN jednostki, score = liczba naruszonych reguł (0–4). Stare reguły (noc, weekend, nieznane urządzenie, błąd, UPDATE/DELETE) usunięte razem z `RuleBasedDetector.py`.
+- [x] **Robust** (D12): mediana + kaskada skal bez wykluczania cech stałych, tylko cechy ciągłe, score = średnia z 3 największych |z|. Dodana tolerancja numeryczna: szum zmiennoprzecinkowy w MAD dawał z rzędu 10¹⁵.
+- [x] **IF / OCSVM / LOF** (`novelty=True`): `StandardScaler` dopasowany na TRAIN jednostki, score = −`decision_function`, `random_state` = ziarno. Siatka 19 konfiguracji, wybór według PR-AUC na VAL, jeden zestaw na wariant (METODOLOGIA D7).
+- [x] **Normalizacja D8** na normalnych oknach VAL jednostki; σ zastępcze, gdy MAD = 0; remisy na 1,0 rozstrzyga nadwyżka ogona (`*_excess` w `val_scores`).
+- [x] **Progi D7**: główny punkt pracy i recall = 0,80; per użytkownik próg wspólny dla roli na połączonych znormalizowanych score’ach.
+- [x] **Zamrożenie przed TEST**: kod Fazy 6 odmawia wczytania TEST. `results/seed_<N>/detectors/full/frozen_config.json` (+ SHA-256) zawiera hiperparametry z wynikami całej siatki, parametry dopasowania per jednostka, normalizację, progi i metryki VAL. Modele trafiają do `models/<wariant>_<detektor>.joblib`.
+- [x] Parametr `groups` w `train_seed` (podzbiór grup D14) i katalog per konfiguracja; w Fazie 7 posłuży do ablacji.
+- [x] Testy: [tests/test_detectors.py](tests/test_detectors.py) (23 testy: reguły, kaskada D12, kierunek score’u ML, przycinanie hiperparametrów, normalizacja, progi, warianty, zastępstwo D12, brak dostępu do TEST). Łącznie 77 testów.
+
+**Sprawdzone na VAL (27.11.2026, 5 ziaren, średnia; ok. 85 s na ziarno):**
+
+| Wariant | Detektor | PR-AUC | FPR (główny próg) | Recall | MCC | FPR przy recall 0,8 |
+|---|---|---|---|---|---|---|
+| global | reguły | 0,19 | 0,035 | 0,25 | 0,28 | 1,00 |
+| global | robust | 0,15 | 0,003 | 0,02 | 0,08 | 0,60 |
+| global | IF | 0,20 | 0,043 | 0,13 | 0,12 | 0,47 |
+| global | OCSVM | 0,43 | 0,026 | 0,32 | 0,39 | 0,41 |
+| global | LOF | 0,46 | 0,018 | 0,33 | 0,44 | 0,42 |
+| per rola | reguły | 0,41 | 0,027 | 0,50 | 0,54 | 1,00 |
+| per rola | robust | 0,40 | 0,016 | 0,30 | 0,42 | 0,37 |
+| per rola | IF | 0,30 | 0,032 | 0,23 | 0,26 | 0,34 |
+| per rola | OCSVM | 0,59 | 0,019 | 0,50 | 0,57 | 0,29 |
+| per rola | LOF | 0,52 | 0,015 | 0,41 | 0,52 | 0,41 |
+| per użytkownik | reguły | 0,32 | 0,024 | 0,31 | 0,37 | 0,60 |
+| per użytkownik | robust | 0,42 | 0,009 | 0,29 | 0,46 | 0,40 |
+| per użytkownik | IF | 0,30 | 0,009 | 0,12 | 0,25 | 0,40 |
+| per użytkownik | OCSVM | 0,58 | 0,005 | 0,40 | 0,59 | 0,31 |
+| per użytkownik | LOF | 0,57 | 0,003 | 0,39 | 0,58 | 0,30 |
+
+To wyniki **VAL, na którym stroiliśmy**, więc nie są wynikami pracy (te pochodzą z TEST, Faza 7). Udział okien anomalnych w VAL: 9,5–10% (poziom losowy PR-AUC). Uwagi:
+- FPR przy głównym progu nie przekracza 5% w żadnym ziarnie (maksimum 4,97%). W wariancie per użytkownik jest zwykle dużo niższy, bo próg maksymalizujący MCC w roli wypada przy niższym FPR.
+- Reguły mają dyskretny score 0–4. W wariantach global i per rola recall 0,8 osiąga się dopiero progiem „każde okno” (FPR = 1). To właściwość baseline’u, którą trzeba opisać przy H1.
+- Robust global jest słaby (kaskada D12 przy cechach prawie stałych, METODOLOGIA D12).
+- Wybrane hiperparametry różnią się między ziarnami (zapisane w `frozen_config.json`).
+
+**Do Fazy 7:** scoring TEST wyłącznie z `frozen_config.json` i modeli `.joblib` (sprawdzenie SHA-256). Ranking alertów sortuje według `rank_key(norm, excess)`. Ablacja: `train_seed(seed, groups=[...], config="<nazwa>")`.
 
 ### Faza 7: Protokół ewaluacji
 
@@ -269,7 +301,7 @@ Obecnie w repozytorium nie ma projektu WPF.
 | Zdublowane `EventUid` z `rpc_completed` (tekst z akcji `sql_text`) | `XeLogReader.cs` | 4 ✅ |
 | Dwie kolumny `operation_type` w tabeli połączonej | `xe_join.py` | 4 ✅ |
 | Zła ścieżka SQL w `setup_ceo_user.py` | `setup_ceo_user.py` | 1 |
-| MAD = 0 → eksplozja z-score (FPR 87%) | `RobustZScoreDetector.py` | 6 |
+| MAD = 0 → eksplozja z-score (FPR 87%) | `RobustZScoreDetector.py` (zastąpiony `detectors.py`) | 6 ✅ |
 | Grupa `operations` pominięta w ablacji | `ml_anomaly_pipeline.py` (archiwum; grupy D14 w `windowing.FEATURE_GROUPS`) | 7 |
 | Hasło i ścieżki zapisane w kodzie, `bin/obj/.vs` w gicie | kilka plików | 1 |
 | Wyniki, dane i raporty z różnych wersji kodu | `results_ml/`, `LOGI/`, raporty | 1, 9 |

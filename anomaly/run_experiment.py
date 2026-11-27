@@ -38,18 +38,9 @@ from anomaly.generator.generate import SEEDS, generate_seed
 from anomaly.paths import (LOGGER_PROJECT, REPO_ROOT, SPLITS, events_csv, joined_csv, run_summary_json,
                            seed_dir, seed_records_csv, users_csv, xe_dir, xe_json)
 from anomaly.settings import get_setting, require_sim_password
+from anomaly.versioning import git_version
 
 XE_FLUSH_WAIT_SEC = 5          # > MAX_DISPATCH_LATENCY sesji XE (3 s)
-
-
-def _git_version() -> dict:
-    def git(*args):
-        try:
-            return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True,
-                                  timeout=20).stdout.strip()
-        except Exception:
-            return ""
-    return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain"))}
 
 
 def _dotnet(args: List[str], step: str) -> float:
@@ -108,7 +99,7 @@ def main(argv=None) -> int:
 
     password = require_sim_password()
     summary = {"seed": args.seed, "started": datetime.now().isoformat(timespec="seconds"),
-               "code_version": _git_version(), "database": get_setting("database"),
+               "code_version": git_version(), "database": get_setting("database"),
                "backup_file": db_admin.backup_file(), "runs": {}}
     t_all = time.perf_counter()
 

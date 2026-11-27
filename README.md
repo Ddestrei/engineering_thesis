@@ -8,7 +8,7 @@ Praca inżynierska: porównanie metod regułowych, statystycznych i uczenia masz
 - [PLAN_NAPRAWCZY.md](PLAN_NAPRAWCZY.md): zadania w kodzie, w kolejności faz.
 - `Ocena_projektu_system_wykrywania_anomalii_SQL_WPF.docx`: ocena zewnętrzna, na którą odpowiadają dwa powyższe pliki.
 
-> **Stan:** trwa realizacja planu naprawczego (Fazy 1–5 zakończone). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth → okna UserId × 30 min z cechami D14. Detektory i ewaluacja na oknach powstają w Fazach 6–7; docelowy łańcuch opisuje METODOLOGIA.md.
+> **Stan:** trwa realizacja planu naprawczego (Fazy 1–6 zakończone). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth → okna UserId × 30 min z cechami D14. Detektory (Faza 6) uczy się i stroi na VAL osobnym poleceniem; ewaluacja na TEST to Faza 7; docelowy łańcuch opisuje METODOLOGIA.md.
 
 ## Struktura repozytorium
 
@@ -21,7 +21,7 @@ anomaly/                  pakiet Pythona
   execution/              zapytania SQL, wykonanie operacji, operacje administracyjne (restore, role, XE)
   run_experiment.py       orkiestrator: cały łańcuch dla jednego ziarna
   features/               połączenie logów XE z ground truth (xe_join), okna i cechy D14 (windowing)
-  models/                 detektory (reguły, robust) i progowanie, do przepisania w Fazie 6
+  models/                 detektory (reguły, robust, IF, OCSVM, LOF), normalizacja D8, progi D7, strojenie na VAL
   evaluation/             ewaluacja, ablacja, EDA (Fazy 7 i 9)
 LOGGER/                   program .NET 9: plik .xel (Extended Events) -> JSON (surowe fakty + EventUid)
 sql_files/                sesja Extended Events, role i loginy (sim_roles_and_users.sql, generowany)
@@ -29,7 +29,7 @@ PREZENTACJE/              prezentacje
 archiwum/                 nieaktualne wyniki sprzed planu naprawczego (patrz archiwum/README.md)
 data/seed_<N>/            [generowane, poza gitem] generated/ (ground truth), xe/ (LOGGER), joined/ (połączone),
                           features/ (okna i cechy), run_summary.json (czasy, statystyki, wersja kodu)
-results/                  [generowane, poza gitem] wyniki eksperymentów i wykresy
+results/seed_<N>/         [generowane, poza gitem] detectors/<konfiguracja>/: zamrożona konfiguracja, modele, score'y VAL
 tests/                    testy jednostkowe (python -m pytest)
 ```
 
@@ -83,7 +83,13 @@ python -m anomaly.execution.db_admin --write-sql        # odświeża sql_files/s
 
 Wykonawca uruchomiony samodzielnie (bez `--dry-run`) nie przywraca bazy ani nie wstawia rekordów startowych; do przebiegów eksperymentu służy wyłącznie `run_experiment`.
 
-**Detektory i ewaluacja** (Fazy 6–7) będą czytać tabele okien z `data/seed_<N>/features/`. Poprzedni eksperyment ML i EDA na cechach per zdarzenie są w `archiwum/stary_pipeline/`.
+**Detektory** (Faza 6): uczenie na TRAIN, strojenie hiperparametrów i progów na VAL, zamrożenie konfiguracji przed TEST:
+
+```bash
+python -m anomaly.models.training --seed 11 22 33 44 55
+```
+
+Wynik: `results/seed_<N>/detectors/full/frozen_config.json` (+ `.sha256`), `models/<wariant>_<detektor>.joblib`, `val_scores_<wariant>.csv`. Polecenie nie czyta plików TEST. **Ewaluacja na TEST** to Faza 7. Poprzedni eksperyment ML i EDA na cechach per zdarzenie są w `archiwum/stary_pipeline/`.
 
 ## Testy
 
