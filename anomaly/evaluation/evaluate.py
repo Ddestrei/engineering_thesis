@@ -132,13 +132,16 @@ def summarize_split(split: str, seeds: List[str], verbose: bool = True) -> dict:
     (out / "hypotheses.json").write_text(json.dumps(hyp, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     perf = pd.DataFrame([{"seed": m["seed"], **m["performance"]} for m in manifests])
     perf.to_csv(out / "performance.csv", index=False)
-    meta = {"split": split, "seeds": seeds, "created": datetime.now().isoformat(timespec="seconds"),
+    scoring = pd.DataFrame([{"seed": m["seed"], "variant": k.split("/")[0], "detector": k.split("/")[1], "us_per_window": us}
+                            for m in manifests for k, us in m.get("scoring_us_per_window", {}).items()])
+    scoring.to_csv(out / "scoring_time.csv", index=False)
+    meta ={"split": split, "seeds": seeds, "created": datetime.now().isoformat(timespec="seconds"),
             "code_version": git_version(),
             "per_seed": [{"seed": m["seed"], "code_version": m["code_version"],
                           "frozen": {c: v["frozen_sha256"] for c, v in m["configs"].items()},
                           "consistency_problems": len(m["consistency_problems"])} for m in manifests]}
     (out / "manifest.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
-    write_report(out / "RAPORT.md", split, summary, hyp, perf, meta)
+    write_report(out / "RAPORT.md", split, summary, hyp, perf, meta, scoring)
     if verbose:
         print(f"Podsumowanie {split}: {out}")
     return hyp
@@ -150,7 +153,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--seed", type=int, nargs="+", required=True)
     parser.add_argument("--configs", nargs="+", choices=list(ABLATION_CONFIGS))
     parser.add_argument("--allow-dirty", action="store_true", help="pozwól ocenić TEST na niezacommitowanym kodzie")
+    parser.add_argument("--summary-only", action="store_true",
+                        help="tylko odtwórz results/summary/<split>/ z istniejących metryk per ziarno (bez scoringu)")
     args = parser.parse_args(argv)
+    if args.summary_only:
+        summarize_split(args.split, args.seed)
+        return 0
     if args.split == "test" and git_version()["dirty"] and not args.allow_dirty:
         print("Drzewo gita ma niezacommitowane zmiany: wyniki TEST nie miałyby jednoznacznej wersji kodu. "
               "Zrób commit albo użyj --allow-dirty.")

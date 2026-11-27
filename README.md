@@ -8,7 +8,7 @@ Praca inżynierska: porównanie metod regułowych, statystycznych i uczenia masz
 - [PLAN_NAPRAWCZY.md](PLAN_NAPRAWCZY.md): zadania w kodzie, w kolejności faz.
 - `Ocena_projektu_system_wykrywania_anomalii_SQL_WPF.docx`: ocena zewnętrzna, na którą odpowiadają dwa powyższe pliki.
 
-> **Stan:** trwa realizacja planu naprawczego (Fazy 1–6 zakończone, Faza 7: kod gotowy). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth → okna UserId × 30 min z cechami D14. Detektory (Faza 6) uczy się i stroi na VAL, a ewaluację na TEST (Faza 7) robi się z zamrożonych plików osobnymi poleceniami; docelowy łańcuch opisuje METODOLOGIA.md.
+> **Stan:** trwa realizacja planu naprawczego (Fazy 1–7 zakończone; wyniki TEST w PLAN_NAPRAWCZY.md, Faza 7). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth → okna UserId × 30 min z cechami D14. Detektory (Faza 6) uczy się i stroi na VAL, a ewaluację na TEST (Faza 7) robi się z zamrożonych plików osobnymi poleceniami; docelowy łańcuch opisuje METODOLOGIA.md.
 
 ## Struktura repozytorium
 
@@ -98,6 +98,7 @@ Wynik: `results/seed_<N>/detectors/full/frozen_config.json` (+ `.sha256`), `mode
 python -m anomaly.evaluation.ablation --seed 11 22 33 44 55                    # 13 konfiguracji D14, ok. 25 min na ziarno
 python -m anomaly.evaluation.evaluate --split validation --seed 11 22 33 44 55  # kontrola: odtworzenie metryk VAL z Fazy 6
 python -m anomaly.evaluation.evaluate --split test --seed 11 22 33 44 55        # wyniki pracy (wymaga czystego drzewa gita)
+python -m anomaly.evaluation.evaluate --split test --seed 11 22 33 44 55 --summary-only  # tylko odtworzenie podsumowania z metryk per ziarno
 ```
 
 Wynik zbiorczy: `results/summary/<split>/` (`RAPORT.md`, `metrics_summary.csv`, `comparisons.csv`, `hypotheses.json`, `performance.csv`, `manifest.json`). Poprzedni eksperyment ML i EDA na cechach per zdarzenie są w `archiwum/stary_pipeline/`.

@@ -5,6 +5,7 @@ Tabele są generowane z metrics_summary.csv i hypotheses.json; nie zawierają r�
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -40,7 +41,8 @@ def _yes(x) -> str:
     return "TAK" if x else "nie"
 
 
-def write_report(path: Path, split: str, summary: pd.DataFrame, hyp: dict, perf: pd.DataFrame, meta: dict) -> None:
+def write_report(path: Path, split: str, summary: pd.DataFrame, hyp: dict, perf: pd.DataFrame, meta: dict,
+                 scoring: Optional[pd.DataFrame] = None) -> None:
     s = summary
     dets = [d for d in DET_ORDER if d in set(s.detector)]
     vars_ = [v for v in VAR_ORDER if v in set(s.variant)]
@@ -126,6 +128,11 @@ def write_report(path: Path, split: str, summary: pd.DataFrame, hyp: dict, perf:
 
     # Wydajność.
     p = perf.drop(columns=[c for c in perf.columns if perf[c].isna().all()])
-    out += ["## Wydajność systemu", "", _table(p.round(2)), "",
-            "Liczba porównań sparowanych: zob. `comparisons.csv` (bez poprawki na wielokrotne testowanie, D21)."]
+    out += ["## Wydajność systemu", "", _table(p.round(2)), ""]
+    if scoring is not None and not scoring.empty:
+        mean = scoring.groupby(["variant", "detector"])["us_per_window"].mean()
+        rows = [[VARIANT_LABEL[v]] + [f"{mean.get((v, d), np.nan):.1f}" for d in dets] for v in vars_]
+        out += ["Czas scoringu z zamrożonych modeli [µs/okno], średnia po ziarnach:", "",
+                _table(pd.DataFrame(rows, columns=["Wariant"] + [DET_LABEL[d] for d in dets])), ""]
+    out += ["Liczba porównań sparowanych: zob. `comparisons.csv` (bez poprawki na wielokrotne testowanie, D21)."]
     Path(path).write_text("\n".join(out) + "\n", encoding="utf-8")

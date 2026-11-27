@@ -216,7 +216,7 @@ To wyniki **VAL, na którym stroiliśmy**, więc nie są wynikami pracy (te poch
 
 **Do Fazy 7:** scoring TEST wyłącznie z `frozen_config.json` i modeli `.joblib` (sprawdzenie SHA-256). Ranking alertów sortuje według `rank_key(norm, excess)`. Ablacja: `train_seed(seed, groups=[...], config="<nazwa>")`.
 
-### Faza 7: Protokół ewaluacji (kod gotowy 27.11.2026; uruchomienie na TEST po commicie)
+### Faza 7: Protokół ewaluacji ✅ (27.11.2026; TEST oceniony na commicie `63326bf`)
 
 Protokół spisany przed pierwszym uruchomieniem TEST jako **METODOLOGIA D21** (metryki, podzbiory, RiskScore, ranking kolejki alertów, zakres ablacji, dokładne kryteria hipotez).
 
@@ -241,7 +241,29 @@ Protokół spisany przed pierwszym uruchomieniem TEST jako **METODOLOGIA D21** (
 - [x] Każdy wynik z wersją kodu i SHA-256 użytej konfiguracji (`manifest.json` per ziarno i zbiorczo). TEST odmawia pracy na niezacommitowanym kodzie (bez `--allow-dirty`).
 - [x] Testy: [tests/test_evaluation.py](tests/test_evaluation.py) (11 testów: RiskScore, metryki per okno i incydent, opóźnienie, ranking i brakujące pozycje, CI, różnice sparowane, H3′, konfiguracje ablacji, odrzucenie zmienionej konfiguracji).
 - [x] **Sprawdzone na VAL** (ziarna 11 i 22, konfiguracja pełna i 4 konfiguracje H2): scoring z plików odtwarza TP/FP z Fazy 6 dla każdego detektora, wariantu i punktu pracy; raport generuje się w całości.
-- [ ] **Uruchomienie** (po commicie, w tej kolejności): ponowne zamrożenie `full`, ablacja, ewaluacja VAL (kontrola), ewaluacja TEST.
+- [x] **Uruchomienie** (27.11.2026, commit `63326bf`, czyste drzewo): ponowne zamrożenie `full`, ablacja (70 zamrożonych konfiguracji = 5 ziaren × 14), ewaluacja VAL (odtworzenie metryk Fazy 6: OK dla każdego ziarna), ewaluacja TEST (0 problemów spójności).
+
+**Wyniki TEST** (5 ziaren, średnia; pełne tabele z 95% CI: `results/summary/test/RAPORT.md`). Udział okien anomalnych: 11,3%.
+
+| Wariant | Najlepszy detektor | PR-AUC | MCC | FPR | Recall | Recall incydentów |
+|---|---|---|---|---|---|---|
+| global | OCSVM | 0,454 | 0,382 | 0,023 | 0,289 | 0,408 |
+| per rola | OCSVM | 0,521 | 0,447 | 0,021 | 0,350 | 0,489 |
+| per użytkownik | OCSVM | 0,467 | 0,403 | 0,016 | 0,279 | 0,397 |
+| per rola | reguły (odniesienie) | 0,339 | 0,435 | 0,026 | 0,363 | 0,502 |
+
+| Hipoteza | Wynik | Uwagi |
+|---|---|---|
+| RQ1 | **niespełnione** | FPR ≤ 5% wszędzie, ale recall ≤ 0,36 (cel 0,50). Na VAL OCSVM per rola miał 0,50, a spadek na TEST wynika głównie z wariantów anomalii TEST (D16, niżej). FP to w 40–87% okna `HARD_NORMAL_*`; FPR na nich 4–16% wobec 0,2–2% na zwykłych. |
+| H1 | **częściowo** (2 z 10) | Istotnie niższy FPR przy recall 0,8 dla IF per rola i LOF per użytkownik. OCSVM, robust i reguły per użytkownik też mają istotnie niższy FPR, ale recall na TEST spada o więcej niż 5 pp. Reguły nie osiągają recall 0,8 w global i per rola (FPR = 1). |
+| H2 | **częściowo** (3 z 15) | Potwierdzona dla LOF i reguł global oraz reguł per użytkownik. Trójka zawsze bije Czas i Kontekst, ale zwykle nie istotnie sam Wolumen (dla IF Wolumen jest lepszy). |
+| H3′ | **potwierdzona** | We wszystkich 3 wariantach OCSVM i LOF mają istotnie wyższe PR-AUC niż reguły, a per użytkownik także MCC. |
+| H4′ | **odrzucona** | Kryterium „porównywalne MCC na silnych” zwykle nie spełnione, bo OCSVM jest na silnych anomaliach istotnie **lepszy** od reguł. Na słabych OCSVM ma istotnie wyższe PR-AUC we wszystkich wariantach, a LOF per użytkownik też. |
+| H5 | **odrzucona** | RiskScore nie bije ani chronologii, ani samego score'u (zwykle jest gorszy). Mechanizm: w kolejce alertów norm ma 0,95–1,0, więc `0,6·norm` prawie nie różnicuje okien i o kolejności decydują severity i kontekst. Severity jest podobne dla TP i FP (ok. 0,65), a kontekst wyższy dla FP (ok. 0,27 wobec 0,05–0,10), bo `HARD_NORMAL_AFTER_HOURS` / `ALT_IP` to legalna praca z nietypowym kontekstem, a większość klas anomalii nie zmienia urządzenia, IP ani pory. Obserwacja po fakcie, protokołu D10/D21 nie zmieniamy. |
+
+**Uogólnianie VAL → TEST (D16).** Największy spadek dotyczy `unusual_ratio`: na VAL przesunięcie proporcji w stronę najrzadszej operacji (63% incydentów z DELETE), na TEST w stronę drugiej najrzadszej (13% z DELETE, głównie INSERT/UPDATE). OCSVM per rola wykrywa 79–86% incydentów z DELETE i ok. 20–30% bez DELETE, więc PR-AUC tej klasy na TEST spada do poziomu losowego (ok. 0,04–0,08) dla wszystkich detektorów. To wynik zamierzonego testu uogólniania, nie błąd. `volume_spike` ma na TEST większy udział okien (43,7% wobec 33,3%), bo skoki TEST trwają 3–4 okna.
+
+**Wydajność:** budowa cech ok. 1,8 s na split, uczenie konfiguracji `full` 75–112 s na ziarno, scoring 3–520 µs/okno (najwolniejszy IF per użytkownik). Tabela w `RAPORT.md`.
 
 **Mapowanie wyników na hipotezy:**
 
