@@ -13,7 +13,7 @@
 Koncepcja jest dobra i recenzent zaleca jej **nie rozszerzać**: bez nowych modeli i bez nowych klas anomalii. Do poprawy są fundamenty. Obecnie:
 
 1. Próbką jest pojedyncze zdarzenie SQL, a 3 z 4 klas anomalii (wolumen, proporcja, rzadki zasób) da się zobaczyć tylko w agregacie.
-2. Pipeline ML **nie czyta logów z Extended Events**: [AnomalyDataLoader.py:93-121](anomaly/features/AnomalyDataLoader.py#L93-L121) losuje metryki SQL w Pythonie.
+2. Pipeline ML **nie czyta logów z Extended Events**: [AnomalyDataLoader.py:93-121](archiwum/stary_pipeline/AnomalyDataLoader.py#L93-L121) losuje metryki SQL w Pythonie (Faza 5 ✅: zastąpione oknami z danych XE).
 3. Jest tylko jeden użytkownik w jednej roli, więc RQ4/H1 są niewykonalne.
 4. Generator ma błędy, które psują normę (np. normalny ruch w weekend).
 
@@ -67,8 +67,8 @@ Cel: każde zdarzenie z XE da się w 100% deterministycznie powiązać z wiersze
 **Sprawdzone na bazie (25.11.2026):** 664 zapytania (3 zbiory) wykonane jako `CEO_User` bez błędów; LOGGER: 664 zdarzenia ze znacznikiem, 0 błędów; walidacja: **pokrycie 100%**, wszystkie 11 kontroli OK. Długość SQL nie zależy już od etykiety (INSERT Customer: średnio 333,1 dla normy i 333,0 dla anomalii; wcześniej komentarz z etykietą różnicował ją o setki znaków).
 
 **Znane ograniczenia przejściowe:**
-- eksperyment ML (`ml_anomaly_pipeline`) nadal czyta pliki generatora, a nie `data/joined/`; zmienia to Faza 5,
-- `eda_pipeline` czyta tylko stary format JSON (archiwum); przepisanie w Fazie 9,
+- eksperyment ML (`ml_anomaly_pipeline`) nadal czyta pliki generatora, a nie `data/joined/`; Faza 5 ✅: przeniesiony do archiwum, cechy liczy `windowing.py` z danych XE,
+- `eda_pipeline` czyta tylko stary format JSON; Faza 5: przeniesiony do archiwum, nowa EDA w Fazie 9,
 - health-check `SELECT 1` nadal generuje zdarzenia XE bez znacznika (LOGGER je pomija); usunięcie w Fazie 4 ✅,
 - `cleanup_simulation_data` nie działa (Faza 4 ✅: zastąpione przywróceniem bazy z `.bak`).
 
@@ -120,29 +120,55 @@ Jedno polecenie przeprowadza ziarno przez cały łańcuch: `python -m anomaly.ru
 - [x] **LOGGER:** nowe pole `TargetTable` (tabela główna zapytania; schemat `xe-export/v3`), domyślnie czyta `C:\XELogs\*.xel`, bez flagi `--ceo`. **Naprawiony błąd:** tekst SQL brany był z akcji `sql_text` (bufor wejściowy sesji); dla wewnętrznych wywołań RPC sterownika ODBC zawierała ona poprzedni batch ze znacznikiem gt, co dawało ok. 2,5 tys. zdublowanych `EventUid` na przebieg TRAIN. Teraz tekst pochodzi z pola zdarzenia (`batch_text` / `statement`).
 - [x] **xe_join:** kontrola `TargetTable == target_table` i kontrola „sesja generatora = dokładnie jedno połączenie XE” (13 kontroli); wynik per split i ziarno. **Naprawiony błąd z Fazy 2:** tabela połączona miała dwie kolumny `operation_type` (z XE i z generatora); teraz każda kolumna kontekstu występuje raz, z wartością z XE.
 - [x] **Dane per ziarno:** `data/seed_<N>/{generated, xe, joined}` i `run_summary.json`. Wcześniej każde ziarno nadpisywałoby pliki poprzedniego.
-- [x] Testy: [tests/test_sql_builder.py](tests/test_sql_builder.py). Dla wszystkich ok. 31 tys. operacji ziarna 11 sprawdza zgodność z uprawnieniami, tabelę docelową, `rowguid`, rodziców i JOIN-y; sprawdza też role i loginy. Łącznie 42 testy.
+- [x] Testy: [tests/test_sql_builder.py](tests/test_sql_builder.py). Dla wszystkich ok. 31 tys. operacji ziarna 11 sprawdza zgodność z uprawnieniami, tabelę docelową, `rowguid`, rodziców i JOIN-y; sprawdza też role i loginy. Łącznie 43 testy.
 
-**Sprawdzone na bazie (25.11.2026, ziarno 11, pełny łańcuch jednym poleceniem, 6,7 min):**
+**Sprawdzone na bazie (25.11.2026, wszystkie ziarna, commit `c57ead3`, `dirty=false`, łącznie ok. 2 h 20 min):**
 
-| Przebieg | Operacje | Sesje | Rekordy startowe | Błędy SQL | Zapis ≠ 1 wiersz | Zapytań/s | Join |
-|---|---|---|---|---|---|---|---|
-| train-s11 | 13 559 | 2 700 | 1 509 | 0 | 0 | 104 | 13 559 (100%) |
-| validation-s11 | 8 328 | 1 496 | 1 114 | 0 | 0 | 88 | 8 328 (100%) |
-| test-s11 | 8 848 | 1 440 | 1 091 | 0 | 0 | 93 | 8 848 (100%) |
+| Ziarno | TRAIN: operacje / sesje | VAL: operacje / sesje / incydenty | TEST: operacje / sesje / incydenty | Zapytań/s |
+|---|---|---|---|---|
+| 11 | 13 559 / 2 700 | 8 328 / 1 496 / 72 | 8 848 / 1 440 / 82 | 18,8–20,9 |
+| 22 | 13 254 / 2 602 | 8 028 / 1 421 / 72 | 8 438 / 1 454 / 73 | 18,8–21,3 |
+| 33 | 13 896 / 2 682 | 8 396 / 1 491 / 72 | 8 965 / 1 493 / 70 | 18,1–20,4 |
+| 44 | 13 519 / 2 677 | 8 202 / 1 442 / 72 | 8 794 / 1 493 / 72 | 17,5–20,2 |
+| 55 | 13 476 / 2 656 | 8 214 / 1 463 / 72 | 8 607 / 1 484 / 74 | 18,3–21,7 |
 
-Wszystkie kontrole joinu OK. Restore 1–4 s, rekordy startowe 10–14 s, LOGGER 2–3 s na przebieg. Tabela pochodzi z przebiegu z pulą połączeń; po poprawce wykonanie trwa ok. 20 zapytań/s (validation-s11: 418 s, pokrycie 100%, 13/13 kontroli), bo każde logowanie loginem SQL trwa ok. 250 ms (Windows Authentication: 23 ms; SQL Server 2025 haszuje hasła loginów SQL kosztownym algorytmem). Pełne ziarno: ok. 25–30 min. JOIN-y stanowią 9–15% zapytań każdej roli. Mediana odczytów logicznych to 37, a liczby wierszy 1–2.
+We wszystkich 15 przebiegach: 0 błędów SQL, 0 zapisów ≠ 1 wiersz, 13/13 kontroli joinu, pokrycie 100%, 0 zdarzeń innych przebiegów. Liczba połączeń XE = liczba sesji generatora (każda sesja ma dokładnie jedno połączenie i odwrotnie). Liczba zdarzeń anomalnych i incydentów po joinie zgadza się z generatorem; VAL ma po 18 incydentów każdej klasy, TEST 14–23 na klasę. TRAIN bez anomalii. Restore ok. 1 s, rekordy startowe 10–14 s, LOGGER 2–3 s na przebieg.
 
-**Do następnych faz:** wszystkie ziarna (11, 22, 33, 44, 55) trzeba uruchomić ponownie po poprawce puli połączeń, tym samym poleceniem (ok. 25–30 min każde). Faza 5 czyta `data/seed_<N>/joined/joined_<split>.csv`; cechy grupy Zasoby liczy z `target_table` (METODOLOGIA D14).
+Tempo ok. 20 zapytań/s wynika z braku puli połączeń: każde logowanie loginem SQL trwa ok. 250 ms (Windows Authentication: 23 ms; SQL Server 2025 haszuje hasła loginów SQL kosztownym algorytmem). Pierwszy przebieg ziarna 11 (z pulą, ok. 90–100 zapytań/s) dał JOIN-y w 9–15% zapytań każdej roli, medianę odczytów logicznych 37 i liczby wierszy 1–2; dane z tamtych przebiegów zostały nadpisane.
 
-### Faza 5: Inżynieria cech (okna czasowe)
+**Do następnych faz:** Faza 5 czyta `data/seed_<N>/joined/joined_<split>.csv` (kolumny m.in. `sim_session_id`, `xe_connection_id`, `target_table`, `gt_*`); cechy grupy Zasoby liczy z `target_table` (METODOLOGIA D14).
 
-- [ ] Nowy moduł `features/windowing.py`: z rekordów XE (po joinie) budować okna `UserId × 30 min`. **Usunąć** syntetyczne metryki z [AnomalyDataLoader.py](anomaly/features/AnomalyDataLoader.py) i odczyt CSV generatora jako źródła cech.
-- [ ] Cechy okna i ich grupy dokładnie według tabeli D14 (6 grup: Czas, Wolumen, Kontekst, Proporcje operacji, Zasoby, Wykonanie). Okna wyrównane według D11.
+### Faza 5: Inżynieria cech (okna czasowe) ✅ (zakończona 27.11.2026)
 
-- [ ] Wszystkie statystyki „rzadkości” i mediany liczyć **wyłącznie z TRAIN** (zapobiega przeciekowi), na poziomie wariantu modelowania: populacja, rola albo użytkownik (D17).
-- [ ] Usunąć cechy błędów (`IsError`, `ErrorNumber`) z wektora cech (D3).
+| Plik | Zawartość |
+|---|---|
+| [windowing.py](anomaly/features/windowing.py) | okna `UserId × 30 min` z danych po joinie XE, cechy D14, statystyki normy z TRAIN per wariant (D17), kontrole poprawności; `python -m anomaly.features.windowing --seed 11 22 33 44 55` |
 
-**Gotowe, gdy:** jedna tabela okien na split z kolumnami `UserId, RoleId, WindowStart, IsAnomaly, IncidentIds, <cechy>`, bez kolumn wyprowadzonych z etykiet.
+- [x] Okna `UserId × 30 min` (D1, D11): wyrównane do pełnych półgodzin, lewostronnie domknięte, czas symulowany, tylko okna z ≥ 1 operacją. `UserId` i `RoleId` wynikają z loginu w logu XE.
+- [x] Cechy według D14, 6 grup; wszystkie z faktów XE (urządzenie, IP, tekst SQL, `TargetTable`, metryki wykonania) i czasu symulowanego. `session_count` liczone z `client_connection_id` z XE, a nie z identyfikatora sesji generatora.
+- [x] Cechy względne (`hour_rarity`, `after_hours_flag`, `volume_ratio_to_median`, `rare_resource_score`, `new_table_flag`, `ip_known_flag`) wyłącznie ze statystyk TRAIN, osobno dla wariantów global / per rola / per użytkownik. Definicje dopisane do D14 (rejestr zmian 27.11.2026): `rare_resource_score` to suma po operacjach na tabelach o udziale < 5%, `after_hours_flag` to wyjście poza [P1, P99] godzin TRAIN, a `avg_query_complexity` rozbite na `avg_join_count` i `avg_sql_length`.
+- [x] Brak cech błędów (D3). Stary kod z syntetycznymi metrykami (`AnomalyDataLoader`, `ml_anomaly_pipeline`, `AnomalyDetectionPipeline`, `eda_pipeline`) przeniesiony do [archiwum/stary_pipeline/](archiwum/stary_pipeline/).
+- [x] Etykiety okna tylko w osobnych kolumnach (`IsAnomaly`, `IncidentIds`, `AnomalyClasses`, `Intensities`, `Severity`, `HardNormal`); `feature_columns(wariant, grupy)` zwraca kolumny cech (także dla ablacji) i nigdy nie zawiera etykiet ani identyfikatorów.
+- [x] Statystyki normy zapisywane do `reference_<wariant>.json` (posłużą też panelowi WPF do porównania z profilem normy).
+- [x] `run_experiment` liczy cechy na końcu przebiegu ziarna.
+- [x] Testy: [tests/test_windowing.py](tests/test_windowing.py) (11 testów na danych syntetycznych: wyrównanie okien, agregaty, etykiety, niezależność od VAL, definicje cech względnych, zależność od wariantu, zastępstwo D12). Łącznie 54 testy.
+
+**Wynik:** `data/seed_<N>/features/windows_<wariant>_<split>.csv` (3 warianty × 3 splity), `reference_<wariant>.json`, `features_report.json`. Kolumny: `UserId, RoleId, WindowStart`, etykiety, cechy (global: 34, rola i użytkownik: 28).
+
+**Sprawdzone (27.11.2026, wszystkie ziarna, ok. 4 s na ziarno):** 7 kontroli × 3 splity × 3 warianty OK w każdym ziarnie (suma operacji okien = liczba zdarzeń, unikalność okien, brak NaN/inf, udziały sumują się do 1, cechy rozłączne z etykietami, każdy incydent w ≥ 1 oknie, okno anomalne ⇔ zawiera zdarzenie incydentu).
+
+| Ziarno | Okna TRAIN | Okna VAL (anomalne) | Okna TEST (anomalne) | Min. okien TRAIN na użytkownika |
+|---|---|---|---|---|
+| 11 | 2 822 | 1 601 (9,5%) | 1 601 (13,0%) | 65 |
+| 22 | 2 691 | 1 514 (9,6%) | 1 601 (10,6%) | 63 |
+| 33 | 2 769 | 1 612 (9,6%) | 1 626 (11,0%) | 66 |
+| 44 | 2 777 | 1 563 (9,8%) | 1 640 (11,0%) | 63 |
+| 55 | 2 786 | 1 579 (10,0%) | 1 612 (11,0%) | 64 |
+
+- Każdy użytkownik ma w TRAIN ≥ 63 okna, więc zastępstwo D12 (< 30 okien → statystyki roli) w żadnym ziarnie się nie uruchamia.
+- Kontrola sygnału (ziarno 11, VAL, średnie okien klasy vs normy): wzrost wolumenu silny `volume_ratio_to_median` 4,1 vs 1,1; nietypowa pora `after_hours_flag` 0,64–0,73 vs 0,05; nietypowa proporcja `delete_ratio` 0,44 vs 0,06. **Rzadki zasób zależy od wariantu (H1):** `rare_resource_score` silnych incydentów to 21,2 per użytkownik i 16,4 per rola, ale 0 w wariancie globalnym, bo rzadka tabela użytkownika nie jest rzadka w populacji. Norma: 0,4.
+
+**Do Fazy 6:** detektory czytają `windows_<wariant>_<split>.csv` i kolumny z `feature_columns(wariant, grupy)`; jednostka modelowania to kolumna `RoleId` albo `UserId`. Na TRAIN cechy względne są liczone w próbie (okno należy do własnej normy), co dla detektorów uczonych na TRAIN jest zgodne z D12/D13.
 
 ### Faza 6: Detektory i progowanie
 
@@ -198,7 +224,7 @@ Obecnie w repozytorium nie ma projektu WPF.
 
 ### Faza 9: EDA, raporty i tekst pracy
 
-- [ ] Przepisać [eda_pipeline.py](anomaly/evaluation/eda_pipeline.py) na nowe dane (okna + zdarzenia), per rola.
+- [ ] Napisać nową EDA na nowych danych (okna + zdarzenia), per rola; poprzednia wersja: [archiwum/stary_pipeline/eda_pipeline.py](archiwum/stary_pipeline/eda_pipeline.py).
 - [ ] Wygenerować od nowa `RAPORT_EDA.md` i `RAPORT_MODELOWANIE_ML.md`. Obecne opisują inny profil niż kod (np. host `CEO-HOME-PC`, inne wagi tabel) i mają martwy link do `ml_anomaly_pipeline.py`.
 - [ ] W pracy dodać rozdział **Ograniczenia**: dane syntetyczne, czas symulowany (kompresja czasu wykonania), IP i host deklarowane przez klienta (`WSID`), brak walidacji na danych produkcyjnych, mała liczba seedów.
 - [ ] W pracy opisać jednoznacznie: jednostkę analizy, mechanizm ground truth, procedurę progowania, definicję opóźnienia, wzór RiskScore, wybór detektora statystycznego (median + MAD).
@@ -228,12 +254,12 @@ Obecnie w repozytorium nie ma projektu WPF.
 
 | Problem | Plik | Faza |
 |---|---|---|
-| ML nie używa danych z XE, metryki są losowane w Pythonie | `AnomalyDataLoader.py` | 5 |
-| Cechy per zdarzenie nie widzą wolumenu, proporcji ani rzadkości | cały pipeline | 5 |
+| ML nie używa danych z XE, metryki są losowane w Pythonie | `AnomalyDataLoader.py` (archiwum) | 5 ✅ |
+| Cechy per zdarzenie nie widzą wolumenu, proporcji ani rzadkości | cały pipeline (zastąpiony `windowing.py`) | 5 ✅ |
 | Normalny ruch w weekend | `CEOLogGenerator._resolve_day_in_week` (usunięty) | 3 ✅ |
 | Niekumulatywne odstępy w sesji | `CEOLogGenerator.py` (usunięty) | 3 ✅ |
 | „Rzadki zasób” nie jest rzadki (Product ~15% SELECT-ów) | `AnomalyConfig.py` (usunięty) | 3 ✅ |
-| `IsError` zawsze 0 (warunek `severity_level >= 11` na skali 1–5); cecha do usunięcia (D3) | `AnomalyDataLoader.py:90` | 5 |
+| `IsError` zawsze 0 (warunek `severity_level >= 11` na skali 1–5); cecha do usunięcia (D3) | `AnomalyDataLoader.py:90` (archiwum) | 5 ✅ |
 | `DayOfWeek`: C# 0=niedziela, pandas 0=poniedziałek | `MLFeatureExporter.cs`, loader | 2 |
 | `SqlTextLength` zawiera komentarz z etykietą | `XeLogReader.cs` | 2 |
 | Błąd SQL daje 2 rekordy | `XeLogReader.cs` | 2 |
@@ -244,7 +270,7 @@ Obecnie w repozytorium nie ma projektu WPF.
 | Dwie kolumny `operation_type` w tabeli połączonej | `xe_join.py` | 4 ✅ |
 | Zła ścieżka SQL w `setup_ceo_user.py` | `setup_ceo_user.py` | 1 |
 | MAD = 0 → eksplozja z-score (FPR 87%) | `RobustZScoreDetector.py` | 6 |
-| Grupa `operations` pominięta w ablacji | `ml_anomaly_pipeline.py` | 7 |
+| Grupa `operations` pominięta w ablacji | `ml_anomaly_pipeline.py` (archiwum; grupy D14 w `windowing.FEATURE_GROUPS`) | 7 |
 | Hasło i ścieżki zapisane w kodzie, `bin/obj/.vs` w gicie | kilka plików | 1 |
 | Wyniki, dane i raporty z różnych wersji kodu | `results_ml/`, `LOGI/`, raporty | 1, 9 |
 

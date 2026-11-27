@@ -8,7 +8,7 @@ Praca inżynierska: porównanie metod regułowych, statystycznych i uczenia masz
 - [PLAN_NAPRAWCZY.md](PLAN_NAPRAWCZY.md): zadania w kodzie, w kolejności faz.
 - `Ocena_projektu_system_wykrywania_anomalii_SQL_WPF.docx`: ocena zewnętrzna, na którą odpowiadają dwa powyższe pliki.
 
-> **Stan:** trwa realizacja planu naprawczego (Fazy 1–4 zakończone). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth. Eksperyment ML nadal używa cech per zdarzenie z plików generatora (Faza 5); docelowy łańcuch opisuje METODOLOGIA.md.
+> **Stan:** trwa realizacja planu naprawczego (Fazy 1–5 zakończone). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth → okna UserId × 30 min z cechami D14. Detektory i ewaluacja na oknach powstają w Fazach 6–7; docelowy łańcuch opisuje METODOLOGIA.md.
 
 ## Struktura repozytorium
 
@@ -20,15 +20,15 @@ anomaly/                  pakiet Pythona
   generator/              generator: profile ról, użytkownicy, norma, incydenty, rekordy startowe
   execution/              zapytania SQL, wykonanie operacji, operacje administracyjne (restore, role, XE)
   run_experiment.py       orkiestrator: cały łańcuch dla jednego ziarna
-  features/               połączenie logów XE z ground truth (xe_join), przygotowanie cech
-  models/                 detektory (reguły, robust, IF, OCSVM, LOF) i progowanie
-  evaluation/             eksperyment ML, ablacja, EDA
+  features/               połączenie logów XE z ground truth (xe_join), okna i cechy D14 (windowing)
+  models/                 detektory (reguły, robust) i progowanie, do przepisania w Fazie 6
+  evaluation/             ewaluacja, ablacja, EDA (Fazy 7 i 9)
 LOGGER/                   program .NET 9: plik .xel (Extended Events) -> JSON (surowe fakty + EventUid)
 sql_files/                sesja Extended Events, role i loginy (sim_roles_and_users.sql, generowany)
 PREZENTACJE/              prezentacje
 archiwum/                 nieaktualne wyniki sprzed planu naprawczego (patrz archiwum/README.md)
 data/seed_<N>/            [generowane, poza gitem] generated/ (ground truth), xe/ (LOGGER), joined/ (połączone),
-                          run_summary.json (czasy, statystyki, wersja kodu)
+                          features/ (okna i cechy), run_summary.json (czasy, statystyki, wersja kodu)
 results/                  [generowane, poza gitem] wyniki eksperymentów i wykresy
 tests/                    testy jednostkowe (python -m pytest)
 ```
@@ -65,7 +65,8 @@ Orkiestrator robi kolejno:
    - start sesji XE z osobnym plikiem `C:\XELogs\<run_id>__<czas>*.xel`,
    - wykonanie operacji w kolejności czasu symulowanego (każda sesja generatora = osobne połączenie z loginem użytkownika, hostem w WSID i urządzeniem/IP w nazwie aplikacji),
    - zatrzymanie XE, LOGGER → `data/seed_<N>/xe/<run_id>.json`, połączenie z ground truth → `data/seed_<N>/joined/joined_<split>.csv` i `join_report_<split>.json`,
-4. podsumowanie `data/seed_<N>/run_summary.json` (czasy kroków, statystyki wykonania, hash commita).
+4. okna UserId × 30 min i cechy D14 → `data/seed_<N>/features/windows_<wariant>_<split>.csv` dla wariantów `global`, `role`, `user` (D17), statystyki normy z TRAIN `reference_<wariant>.json` i kontrole `features_report.json`,
+5. podsumowanie `data/seed_<N>/run_summary.json` (czasy kroków, statystyki wykonania, hash commita).
 
 Kod wyjścia 0 oznacza: zero błędów SQL, każdy zapis zmienił dokładnie jeden wiersz, a join ma pokrycie 100%. Przy pierwszym błędzie orkiestrator kończy pracę (przebieg odrzucony).
 
@@ -76,19 +77,13 @@ python -m anomaly.generator.generate --seed 11
 python -m anomaly.execution.db_workload_executor --seed 11 --split validation --dry-run    # zapytania bez bazy
 dotnet run --project LOGGER -- [plik|katalog|wzorzec.xel] [wyjście.json] [--user LOGIN]
 python -m anomaly.features.xe_join --seed 11 --split validation [--xe plik.json]
+python -m anomaly.features.windowing --seed 11 22 33 44 55     # same cechy, z istniejących danych joined/
 python -m anomaly.execution.db_admin --write-sql        # odświeża sql_files/sim_roles_and_users.sql
 ```
 
 Wykonawca uruchomiony samodzielnie (bez `--dry-run`) nie przywraca bazy ani nie wstawia rekordów startowych; do przebiegów eksperymentu służy wyłącznie `run_experiment`.
 
-**Eksperyment ML** (wyniki w `results/ml/`) i **EDA** (wykresy w `results/eda_plots/`):
-
-```bash
-python -m anomaly.evaluation.ml_anomaly_pipeline
-python -m anomaly.evaluation.eda_pipeline [plik.json]
-```
-
-**Stan przejściowy:** eksperyment ML czyta jeszcze pliki generatora ziarna 11 zamiast `data/seed_<N>/joined/` (zmieni to Faza 5), a EDA czyta tylko stary format JSON z archiwum (Faza 9).
+**Detektory i ewaluacja** (Fazy 6–7) będą czytać tabele okien z `data/seed_<N>/features/`. Poprzedni eksperyment ML i EDA na cechach per zdarzenie są w `archiwum/stary_pipeline/`.
 
 ## Testy
 

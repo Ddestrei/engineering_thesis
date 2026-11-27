@@ -141,13 +141,20 @@ Wagi ustalone a priori i niezmieniane po obejrzeniu wyników TEST. Składniki po
 |---|---|
 | **Czas** | `hour_sin`, `hour_cos`, `dow_sin`, `dow_cos`, `is_weekend`, `after_hours_flag`, `hour_rarity` |
 | **Wolumen** | `operation_count`, `session_count`, `ops_per_session`, `volume_ratio_to_median` |
-| **Kontekst** | `device_type` (one-hot), `ip_known_flag`, `role_id` (tylko w wariancie globalnym) |
+| **Kontekst** | `device_type` (one-hot: udział operacji okna z każdego z 4 typów urządzeń), `ip_known_flag`, `role_id` (one-hot, tylko w wariancie globalnym) |
 | **Proporcje operacji** | `select_ratio`, `insert_ratio`, `update_ratio`, `delete_ratio` |
 | **Zasoby** | `unique_tables`, `rare_resource_score`, `new_table_flag` (z tabeli docelowej operacji, `TargetTable`) |
-| **Wykonanie** | `sum_logical_reads`, `sum_rows`, `mean_duration`, `avg_query_complexity` (liczba JOIN-ów, długość SQL **bez komentarza z identyfikatorem**) |
+| **Wykonanie** | `sum_logical_reads`, `sum_rows`, `mean_duration`, `avg_join_count` (średnia liczba słów `JOIN` w zapytaniu), `avg_sql_length` (średnia długość SQL **bez komentarza z identyfikatorem**) |
 
-- **Tabela operacji:** cechy grupy Zasoby liczone są z tabeli docelowej (`TargetTable` z logu XE: pierwsza tabela po `FROM`/`INTO`/`UPDATE`/`DELETE FROM`). Pełna lista tabel zapytania (`Tables`) zawiera też tabele dołączane JOIN-em i tabele rodziców wyszukiwanych podzapytaniem w INSERT (np. model i opis przy powiązaniu `ProductModelProductDescription`); służy tylko do `avg_query_complexity`. JOIN-y w zapytaniach normy łączą wyłącznie tabele dozwolone dla roli i nie dołączają rzadkich tabel użytkownika (D15).
-- Cechy „rzadkości” i „względem normy” (`hour_rarity`, `after_hours_flag`, `volume_ratio_to_median`, `rare_resource_score`, `new_table_flag`, `ip_known_flag`) liczone są **wyłącznie z TRAIN**, na poziomie jednostki modelowania (D17).
+- **Tabela operacji:** cechy grupy Zasoby liczone są z tabeli docelowej (`TargetTable` z logu XE: pierwsza tabela po `FROM`/`INTO`/`UPDATE`/`DELETE FROM`). Pełna lista tabel zapytania (`Tables`) zawiera też tabele dołączane JOIN-em i tabele rodziców wyszukiwanych podzapytaniem w INSERT (np. model i opis przy powiązaniu `ProductModelProductDescription`); nie jest używana w cechach. JOIN-y w zapytaniach normy łączą wyłącznie tabele dozwolone dla roli i nie dołączają rzadkich tabel użytkownika (D15).
+- Cechy „rzadkości” i „względem normy” (`hour_rarity`, `after_hours_flag`, `volume_ratio_to_median`, `rare_resource_score`, `new_table_flag`, `ip_known_flag`) liczone są **wyłącznie z TRAIN**, na poziomie jednostki modelowania (D17). Definicje (jednostka = populacja, rola albo użytkownik; `p̂` z wygładzeniem Laplace’a):
+  - `hour_rarity = −log p̂(godzina startu okna)`, gdzie `p̂(h) = (liczba okien TRAIN jednostki startujących w godzinie h + 1) / (liczba okien + 24)`;
+  - `after_hours_flag = 1`, gdy którakolwiek operacja okna wypada poza przedziałem [P1, P99] godzin operacji jednostki w TRAIN (te same percentyle co w D13). Godzin pracy z profilu generatora nie używa się, z tego samego powodu co w D13;
+  - `volume_ratio_to_median = operation_count / mediana operation_count okien TRAIN jednostki`;
+  - `rare_resource_score = Σ −log p̂(tabela)` po operacjach okna na tabelach **rzadkich**, czyli o udziale `p̂(t) = (n_t + 1) / (N + 10) < 5%` operacji jednostki w TRAIN. Suma po operacjach odróżnia pojedynczy legalny odczyt rzadkiej tabeli (D15) od serii odczytów. Przy samym maksimum oba przypadki dawałyby tę samą wartość, a reguła D13 (> P99) prawie nigdy by nie zadziałała;
+  - `new_table_flag = 1`, gdy okno dotyka tabeli, której jednostka nie używała w TRAIN;
+  - `ip_known_flag = 1`, gdy wszystkie adresy IP okna wystąpiły w TRAIN jednostki.
+- Zastępstwo z D12 (statystyki roli dla użytkownika z < 30 oknami TRAIN) dotyczy także statystyk cech względnych w wariancie per użytkownik.
 - **Konfiguracje ablacji:**
   - pojedyncze grupy: Czas, Wolumen, Kontekst (to bezpośrednio sprawdza H2),
   - pary: Czas+Wolumen, Czas+Kontekst, Wolumen+Kontekst,
@@ -289,3 +296,4 @@ H1, H2 i H5 pozostają bez zmian.
 |---|---|---|---|
 | 25.11.2026 | – | wersja początkowa | – |
 | 25.11.2026 | D11, D14, D20 | Faza 4: restore z `.bak` przed przebiegiem, `TargetTable` jako źródło cech Zasoby, adresowanie po `rowguid`, tryb utraty zdarzeń XE | doprecyzowanie przed pierwszym uruchomieniem na TEST (wynika z implementacji, nie z wyników) |
+| 27.11.2026 | D14 | Faza 5: `avg_query_complexity` rozbite na `avg_join_count` i `avg_sql_length` (grupa Wykonanie ma 5 cech); spisane definicje cech względnych (`hour_rarity`, `after_hours_flag` z [P1, P99] godzin TRAIN, `rare_resource_score` jako suma po operacjach na tabelach o udziale < 5%, `volume_ratio_to_median`, `new_table_flag`, `ip_known_flag`); `device_type` jako udziały 4 typów urządzeń | D14 nie definiował tych cech jednoznacznie, a `avg_query_complexity` łączyło dwie wielkości w różnych jednostkach. Ustalone przed uczeniem jakiegokolwiek detektora, bez oglądania wyników |

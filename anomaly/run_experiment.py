@@ -4,6 +4,7 @@ Orkiestrator jednego ziarna eksperymentu (PLAN Faza 4). Każde ziarno przechodzi
     generator  ->  dla każdego splitu (train, validation, test):
                    restore bazy z .bak -> role i użytkownicy -> rekordy startowe -> start XE (osobny plik)
                    -> wykonanie operacji -> stop XE -> LOGGER (.xel -> JSON) -> join z ground truth
+               ->  okna UserId × 30 min i cechy D14 (Faza 5, anomaly/features/windowing.py)
 
 Uruchomienie (z katalogu głównego repozytorium, konto Windows z uprawnieniami sysadmin):
     python -m anomaly.run_experiment --seed 11
@@ -11,7 +12,7 @@ Uruchomienie (z katalogu głównego repozytorium, konto Windows z uprawnieniami 
 
 Wymaga: hasła loginów symulacji (sim_password w config.local.json albo ANOMALY_SIM_PASSWORD),
 pliku .bak bazy, katalogu plików XE (domyślnie C:\\XELogs), .NET 9 SDK (LOGGER).
-Wynik: data/seed_<N>/ (generated/, xe/, joined/, run_summary.json). Kod wyjścia 0 tylko wtedy,
+Wynik: data/seed_<N>/ (generated/, xe/, joined/, features/, run_summary.json). Kod wyjścia 0 tylko wtedy,
 gdy wszystkie przebiegi wykonały się bez błędów i join ma pokrycie 100%.
 """
 from __future__ import annotations
@@ -30,11 +31,12 @@ from anomaly.execution import db_admin
 from anomaly.execution.DBConfig import DBConfig
 from anomaly.execution.DBWorkloadExecutor import DBWorkloadExecutor, load_events
 from anomaly.execution.ExecutionConfig import ExecutionConfig
+from anomaly.features.windowing import build_seed
 from anomaly.features.xe_join import join_split
 from anomaly.generator.dataset import make_run_id
 from anomaly.generator.generate import SEEDS, generate_seed
-from anomaly.paths import (LOGGER_PROJECT, REPO_ROOT, SPLITS, events_csv, run_summary_json, seed_dir,
-                           seed_records_csv, users_csv, xe_dir, xe_json)
+from anomaly.paths import (LOGGER_PROJECT, REPO_ROOT, SPLITS, events_csv, joined_csv, run_summary_json,
+                           seed_dir, seed_records_csv, users_csv, xe_dir, xe_json)
 from anomaly.settings import get_setting, require_sim_password
 
 XE_FLUSH_WAIT_SEC = 5          # > MAX_DISPATCH_LATENCY sesji XE (3 s)
@@ -134,6 +136,14 @@ def main(argv=None) -> int:
         ok = ok and result["ok"]
         if not result["ok"]:
             break                           # przebieg odrzucony: nie wykonujemy kolejnych
+
+    # Faza 5: cechy okien wymagają wszystkich trzech splitów (norma z TRAIN).
+    if ok and all((s in summary["runs"]) or joined_csv(s, args.seed).exists() for s in SPLITS):
+        t0 = time.perf_counter()
+        features = build_seed(args.seed)
+        summary["features_sec"] = round(time.perf_counter() - t0, 2)
+        summary["features_ok"] = features.ok
+        ok = ok and features.ok
 
     summary["total_sec"] = round(time.perf_counter() - t_all, 2)
     summary["ok"] = ok and len(summary["runs"]) == len(args.splits)

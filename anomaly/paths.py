@@ -8,6 +8,7 @@ Dane każdego ziarna (METODOLOGIA D6) leżą w osobnym katalogu data/seed_<N>/:
     generated/   pliki generatora (ground truth, rekordy startowe, użytkownicy)
     xe/          eksport JSON z LOGGER-a, jeden plik na przebieg (<run_id>.json)
     joined/      zdarzenia XE połączone z ground truth + raporty walidacji
+    features/    okna UserId × 30 min z cechami D14 per wariant modelowania (Faza 5)
     run_summary.json  podsumowanie przebiegu run_experiment (czasy, statystyki)
 """
 from pathlib import Path
@@ -87,3 +88,21 @@ def join_report_json(split: str, seed: int) -> Path:
 
 def run_summary_json(seed: int) -> Path:
     return seed_dir(seed) / "run_summary.json"
+
+
+def features_dir(seed: int) -> Path:
+    return seed_dir(seed) / "features"
+
+
+def windows_csv(variant: str, split: str, seed: int) -> Path:
+    """Okna UserId × 30 min z cechami D14 dla wariantu modelowania (global / role / user)."""
+    return features_dir(seed) / f"windows_{variant}_{split}.csv"
+
+
+def reference_json(variant: str, seed: int) -> Path:
+    """Statystyki normy z TRAIN, z których liczone są cechy względne wariantu."""
+    return features_dir(seed) / f"reference_{variant}.json"
+
+
+def features_report_json(seed: int) -> Path:
+    return features_dir(seed) / "features_report.json"
