@@ -212,21 +212,36 @@ To wyniki **VAL, na którym stroiliśmy**, więc nie są wynikami pracy (te poch
 - Reguły mają dyskretny score 0–4. W wariantach global i per rola recall 0,8 osiąga się dopiero progiem „każde okno” (FPR = 1). To właściwość baseline’u, którą trzeba opisać przy H1.
 - Robust global jest słaby (kaskada D12 przy cechach prawie stałych, METODOLOGIA D12).
 - Wybrane hiperparametry różnią się między ziarnami (zapisane w `frozen_config.json`).
+- **Poprawka z Fazy 7:** `ScoreNormalizer.to_dict()` zaokrąglał score'y referencyjne do 10 miejsc, przez co scoring z pliku przesuwał rank okien leżących na granicy progu (VAL: 1–16 FP różnicy na detektor). Wykryła to kontrola spójności Fazy 7; teraz referencja jest zapisywana w pełnej precyzji, a metryki VAL odtwarzają się dokładnie. Konfiguracje `full` trzeba zamrozić ponownie (metryki VAL z tabeli wyżej się nie zmieniają, bo były liczone w pamięci).
 
 **Do Fazy 7:** scoring TEST wyłącznie z `frozen_config.json` i modeli `.joblib` (sprawdzenie SHA-256). Ranking alertów sortuje według `rank_key(norm, excess)`. Ablacja: `train_seed(seed, groups=[...], config="<nazwa>")`.
 
-### Faza 7: Protokół ewaluacji
+### Faza 7: Protokół ewaluacji (kod gotowy 27.11.2026; uruchomienie na TEST po commicie)
 
-- [ ] Metryki per okno na TEST: Precision, Recall, PR-AUC, MCC, FPR, **osobno dla każdej klasy anomalii** (wymagane przez RQ5) i łącznie.
-- [ ] Metryki per incydent: recall incydentów i **opóźnienie wykrycia** (D9): mediana i P90.
-- [ ] **Ablacja (RQ2/H2)**: konfiguracje dokładnie według D14 (pojedyncze grupy Czas/Wolumen/Kontekst, ich pary, trójka, pełny zestaw, leave-one-group-out dla 6 grup). Wyniki łącznie **i per klasa anomalii**.
-- [ ] **Udział anomalii**: raportować rzeczywisty odsetek okien anomalnych w VAL i TEST (cel 5–10%, D18) jako poziom odniesienia dla Precision i PR-AUC.
-- [ ] **Wyniki per klasa × intensywność (RQ5, H4′)**: osobno dla anomalii silnych i słabych (METODOLOGIA D15).
-- [ ] **Ranking alertów (RQ6/H5)**: Precision@K i NDCG@K (K = 10, 20, 50; relewancja = severity incydentu według D19) dla trzech sortowań: chronologicznego, według pojedynczego anomaly score i według RiskScore.
-- [ ] **Powtarzalność**: 5 seedów (D6), mean ± std, 95% CI. Porównania metod i wariantów według kryterium istotności z D6 (95% CI różnicy sparowanej po ziarnach).
-- [ ] **Analiza błędów**: ile FP pochodzi z `HARD_NORMAL_*`; to bezpośrednio odpowiada na RQ1 (akceptowalny FPR).
-- [ ] **Wydajność systemu**: czas importu XE, zdarzenia/s w LOGGER, czas budowy cech, czas scoringu.
-- [ ] Wszystkie wyniki zapisywać z `RunId`, wersją kodu (hash commita) i konfiguracją, żeby każdą liczbę w pracy dało się odtworzyć.
+Protokół spisany przed pierwszym uruchomieniem TEST jako **METODOLOGIA D21** (metryki, podzbiory, RiskScore, ranking kolejki alertów, zakres ablacji, dokładne kryteria hipotez).
+
+| Plik | Zawartość |
+|---|---|
+| [ablation.py](anomaly/evaluation/ablation.py) | 14 konfiguracji D14 i ich uczenie (procedura Fazy 6, tylko TRAIN/VAL) |
+| [score_frozen.py](anomaly/evaluation/score_frozen.py) | score'y splitu wyłącznie z `frozen_config.json` (sprawdzenie SHA-256) i modeli `.joblib`; kontrola, że na VAL odtwarzają się alarmy z Fazy 6 |
+| [risk.py](anomaly/evaluation/risk.py) | składniki RiskScore z obserwowalnych danych okna (D10, D21) |
+| [metrics.py](anomaly/evaluation/metrics.py) | metryki per okno, per klasa / intensywność / klasa × intensywność, incydenty i opóźnienie (D9), analiza FP z `HARD_NORMAL_*`, ranking P@K / NDCG@K |
+| [stats.py](anomaly/evaluation/stats.py) | średnia ± std, 95% CI t-Studenta, różnice sparowane po ziarnach, kryteria RQ1, H1, H2, H3′, H4′, H5 |
+| [evaluate.py](anomaly/evaluation/evaluate.py), [report.py](anomaly/evaluation/report.py) | orkiestracja, wydajność systemu, `results/summary/<split>/` z `RAPORT.md` |
+
+- [x] Metryki per okno na TEST: Precision, Recall, PR-AUC, MCC, FPR, łącznie i per klasa (D2: negatywy = okna normalne).
+- [x] Metryki per incydent: recall incydentów, opóźnienie (mediana, P90), odsetek niewykrytych; łącznie i per klasa.
+- [x] Ablacja: 14 konfiguracji × 5 detektorów × 3 warianty, każda z własnym strojeniem na VAL.
+- [x] Udział anomalii w raporcie (poziom odniesienia PR-AUC).
+- [x] Wyniki per klasa × intensywność.
+- [x] Ranking kolejki alertów (P@K, NDCG@K, K = 10, 20, 50) dla 3 sortowań.
+- [x] Powtarzalność: mean ± std, 95% CI, różnice sparowane (D6); `comparisons.csv` z każdym porównaniem.
+- [x] Analiza błędów: udział FP z `HARD_NORMAL_*` (łącznie i per tag), FPR na oknach trudnych i zwykłych.
+- [x] Wydajność: czas wykonania i zapytania/s, czas LOGGER-a i zdarzenia/s, czas joinu, budowy cech, uczenia i scoringu (µs/okno).
+- [x] Każdy wynik z wersją kodu i SHA-256 użytej konfiguracji (`manifest.json` per ziarno i zbiorczo). TEST odmawia pracy na niezacommitowanym kodzie (bez `--allow-dirty`).
+- [x] Testy: [tests/test_evaluation.py](tests/test_evaluation.py) (11 testów: RiskScore, metryki per okno i incydent, opóźnienie, ranking i brakujące pozycje, CI, różnice sparowane, H3′, konfiguracje ablacji, odrzucenie zmienionej konfiguracji).
+- [x] **Sprawdzone na VAL** (ziarna 11 i 22, konfiguracja pełna i 4 konfiguracje H2): scoring z plików odtwarza TP/FP z Fazy 6 dla każdego detektora, wariantu i punktu pracy; raport generuje się w całości.
+- [ ] **Uruchomienie** (po commicie, w tej kolejności): ponowne zamrożenie `full`, ablacja, ewaluacja VAL (kontrola), ewaluacja TEST.
 
 **Mapowanie wyników na hipotezy:**
 

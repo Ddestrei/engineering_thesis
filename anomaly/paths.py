@@ -130,3 +130,25 @@ def models_joblib(variant: str, detector: str, seed: int, config: str = "full") 
 
 def val_scores_csv(variant: str, seed: int, config: str = "full") -> Path:
     return detectors_dir(seed, config) / f"val_scores_{variant}.csv"
+
+
+# --- ewaluacja (Faza 7) --------------------------------------------------------------------
+# results/seed_<N>/evaluation/<split>/<konfiguracja>/   split = "test" (wyniki) albo "validation" (kontrola)
+
+def evaluation_root(seed: int, split: str) -> Path:
+    """metrics.csv, incidents_full.csv i manifest.json ziarna dla splitu (wszystkie konfiguracje)."""
+    return results_seed_dir(seed) / "evaluation" / split
+
+
+def evaluation_dir(seed: int, split: str, config: str = "full") -> Path:
+    return evaluation_root(seed, split) / config
+
+
+def scores_csv(variant: str, split: str, seed: int, config: str = "full") -> Path:
+    """Score'y z zamrożonych modeli: surowy, znormalizowany, nadwyżka ogona, alarmy, RiskScore."""
+    return evaluation_dir(seed, split, config) / f"scores_{variant}.csv"
+
+
+def summary_dir(split: str = "test") -> Path:
+    """Wyniki zbiorcze po 5 ziarnach (średnia, odchylenie, 95% CI, porównania, hipotezy)."""
+    return RESULTS_DIR / "summary" / split

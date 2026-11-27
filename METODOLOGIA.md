@@ -3,7 +3,7 @@
 **Status:** zamrożone 25.11.2026. Przed uruchomieniem eksperymentów na zbiorze testowym.
 **Zasada:** po pierwszym uruchomieniu na TEST żadnej decyzji nie zmienia się bez wpisu w sekcji „Rejestr zmian” na końcu dokumentu (data, co zmieniono, dlaczego). Chroni to przed dopasowywaniem metody do wyników testowych.
 
-Oznaczenia: TRAIN, VAL, TEST to zbiory treningowy, walidacyjny i testowy. „Okno” to próbka analityczna zdefiniowana w D1.
+Decyzje D1–D21. Oznaczenia: TRAIN, VAL, TEST to zbiory treningowy, walidacyjny i testowy. „Okno” to próbka analityczna zdefiniowana w D1.
 
 ---
 
@@ -258,6 +258,34 @@ Severity (1–5) **nie jest losowana**. Wyznacza się ją deterministycznie z ce
 
 **Konsekwencje dla incydentów (D3):** incydenty używają wyłącznie urządzeń i kont danego użytkownika. Obce urządzenie z zewnętrznym IP (dawniej „ROGUE-EXT-PC” w starym generatorze) zostało usunięte, bo to naruszenie bezpieczeństwa spoza 4 klas behawioralnych. Dzień incydentu wypada w dniu, w którym użyte urządzenie jest zwykle używane, żeby incydent był anomalią tylko w swojej klasie (np. wzrost wolumenu CEO nie wypada w poniedziałek w biurze).
 
+### D21. Protokół ewaluacji na TEST (decyzja z 27.11.2026, przed pierwszym uruchomieniem TEST)
+- **Źródło score’ów:** TEST oceniany jest wyłącznie modelami `.joblib` i plikiem `frozen_config.json` z Fazy 6, po sprawdzeniu sumy SHA-256. Nic nie jest dopasowywane na TEST.
+- **Metryki per okno** (dla każdego ziarna, konfiguracji cech, wariantu D17 i detektora): Precision, Recall, FPR, MCC przy głównym progu D7 oraz PR-AUC (average precision). PR-AUC liczone jest według kolejności D8 (`norm`, remisy według nadwyżki ogona). Przy progu recall = 0,80 raportowane są FPR i recall (H1).
+- **Podzbiory (D2):**
+  - per klasa: pozytywy to okna z incydentem klasy *c*, negatywy to wszystkie okna normalne, a okna innych klas są pomijane;
+  - per intensywność i per klasa × intensywność: tak samo, z incydentami danej intensywności (`incidents.csv`).
+- **Metryki per incydent (D9):** incydent jest wykryty, jeśli alarm przy głównym progu ma ≥ 1 okno zawierające jego zdarzenie. `delay = koniec pierwszego takiego okna − czas pierwszego zdarzenia incydentu`. Raportowane: recall incydentów, mediana i P90 opóźnienia wykrytych (w minutach), odsetek niewykrytych; łącznie i per klasa.
+- **RiskScore (D10), składniki z obserwowalnych danych okna:**
+  - `severity_weight`: maksimum po operacjach okna z wrażliwości tabeli docelowej × 1,0 (INSERT/UPDATE/DELETE) albo × 0,7 (SELECT);
+  - `context_weight`: średnia trzech flag: `after_hours_flag` z wariantu per użytkownik; urządzenie inne niż podstawowe, gdzie podstawowe to typ urządzenia z największą liczbą operacji użytkownika w TRAIN, a flaga = 1, gdy okno ma operację z innego urządzenia; `1 − ip_known_flag` z wariantu per użytkownik.
+  - Te same składniki są używane we wszystkich wariantach i detektorach; zmienia się tylko `norm_anomaly_score`.
+- **Ranking (H5):** sortowana jest **kolejka alertów**, czyli okna TEST z alarmem przy głównym progu, jedna kolejka na ziarno, wariant i detektor. Trzy sortowania:
+  - chronologiczne: `WindowStart`, potem `UserId`;
+  - według score’u: kolejność D8;
+  - według RiskScore: malejąco, remisy według kolejności D8;
+  - pozostałe remisy (np. reguły z dyskretnym score’em) rozstrzygane są chronologicznie, tak jak analityk przegląda alerty o równym priorytecie.
+- **Miary rankingu:** `P@K` = liczba okien anomalnych w pierwszych K / K; przy mniej niż K alertach brakujące pozycje liczone są jako nietrafione. `NDCG@K` z zyskiem liniowym `rel / log2(i + 1)`, gdzie rel = severity D19. IDCG liczone jest z tej samej kolejki alertów; jeśli kolejka nie zawiera okna anomalnego, NDCG jest nieokreślone i nie wchodzi do średniej (liczba takich przypadków jest raportowana).
+- **Analiza błędów (RQ1):** odsetek FP przy głównym progu, które są oknami `HARD_NORMAL_*` (łącznie i per tag), na tle udziału takich okien wśród wszystkich okien normalnych. Raportowany jest też FPR osobno na oknach trudnych i zwykłych.
+- **Ablacja (H2):** 14 konfiguracji z D14 dla wszystkich 5 detektorów i 3 wariantów. Każda konfiguracja ma własne strojenie hiperparametrów, normalizację i progi na VAL (procedura Fazy 6). Reguły korzystają tylko z tych swoich reguł, których cechy są w konfiguracji; bez żadnej reguły score jest stały (brak alarmów).
+- **Kryteria hipotez** (różnice sparowane po 5 ziarnach, 95% CI t-Studenta, D6; „istotnie lepszy” = CI różnicy całkowicie powyżej 0, „porównywalny” = CI zawiera 0). Oceniane osobno dla każdego wariantu i detektora:
+  - **RQ1:** średni FPR ≤ 5% i średni recall ≥ 0,50 przy głównym progu;
+  - **H1:** dla każdego detektora per rola vs global i per użytkownik vs global, przy progu recall = 0,80: FPR istotnie niższy, a |średnia różnica recall na TEST| ≤ 5 pp;
+  - **H2:** konfiguracja Czas+Wolumen+Kontekst istotnie lepsza w PR-AUC od każdej z grup Czas, Wolumen, Kontekst osobno (MCC raportowane pomocniczo); także per klasa;
+  - **H3′:** co najmniej jeden z IF, OCSVM, LOF istotnie lepszy od reguł w PR-AUC lub MCC (konfiguracja pełna);
+  - **H4′:** dla każdej metody *m* ∈ {robust, IF, OCSVM, LOF}: na anomaliach silnych różnica MCC (*m* − reguły) porównywalna, a na słabych PR-AUC *m* istotnie wyższe niż reguł;
+  - **H5:** RiskScore istotnie lepszy od chronologii i od samego score’u w NDCG@K i P@K, osobno dla K = 10, 20, 50.
+- **Wiele porównań:** nie stosuje się poprawki na wielokrotne porównania. Liczba porównań jest raportowana, a wnioski opierają się na spójności wyników między wariantami i detektorami (ograniczenie, sekcja E).
+
 ---
 
 ## C. Hipotezy po zmianie zakresu (D3)
@@ -277,6 +305,7 @@ H1, H2 i H5 pozostają bez zmian.
 
 | RQ / H | Decyzje |
 |---|---|
+| Wszystkie (protokół TEST) | D21 |
 | RQ1 | D1, D7 (kryterium RQ1: FPR ≤ 5% i recall ≥ 0,50 na TEST), D15 (trudne przypadki) |
 | RQ2 / H2 | D14 (łącznie i per klasa) |
 | RQ3 / H3′ | D7, D12, D13 |
@@ -294,6 +323,7 @@ H1, H2 i H5 pozostają bez zmian.
 - Czas zdarzeń jest symulowany. Zapytania wykonywane są w skompresowanym czasie, więc obciążenie serwera nie odpowiada rzeczywistemu rozkładowi dobowemu.
 - Host i IP są deklarowane przez klienta (`WSID`, znacznik symulacji), a nie weryfikowane sieciowo.
 - n = 5 powtórzeń daje szerokie przedziały ufności.
+- Porównań jest wiele (warianty × detektory × hipotezy), a nie stosuje się poprawki na wielokrotne testowanie (D21). Pojedynczy „istotny” wynik należy czytać razem z kierunkiem pozostałych.
 - Naruszenia uprawnień są poza zakresem (D3).
 - Treść zapytań pochodzi z szablonów (kilka do kilkunastu na tabelę i operację). Baza AdventureWorksLT jest mała, więc metryki wykonania (odczyty, czas) mają niewielką zmienność; grupa cech Wykonanie może przez to wnosić mało informacji.
 
@@ -307,3 +337,4 @@ H1, H2 i H5 pozostają bez zmian.
 | 25.11.2026 | D11, D14, D20 | Faza 4: restore z `.bak` przed przebiegiem, `TargetTable` jako źródło cech Zasoby, adresowanie po `rowguid`, tryb utraty zdarzeń XE | doprecyzowanie przed pierwszym uruchomieniem na TEST (wynika z implementacji, nie z wyników) |
 | 27.11.2026 | D14 | Faza 5: `avg_query_complexity` rozbite na `avg_join_count` i `avg_sql_length` (grupa Wykonanie ma 5 cech); spisane definicje cech względnych (`hour_rarity`, `after_hours_flag` z [P1, P99] godzin TRAIN, `rare_resource_score` jako suma po operacjach na tabelach o udziale < 5%, `volume_ratio_to_median`, `new_table_flag`, `ip_known_flag`); `device_type` jako udziały 4 typów urządzeń | D14 nie definiował tych cech jednoznacznie, a `avg_query_complexity` łączyło dwie wielkości w różnych jednostkach. Ustalone przed uczeniem jakiegokolwiek detektora, bez oglądania wyników |
 | 27.11.2026 | D7, D8, D12 | Faza 6: kryterium wyboru hiperparametrów (PR-AUC na VAL) i siatka; zasady remisu i progu „brak alarmów”; zastępstwo D12 dla wszystkich detektorów; σ zastępcze w D8 i rozstrzyganie remisów na 1,0; definicja cech ciągłych i tolerancja numeryczna w D12 | D7, D8 i D12 nie określały tych przypadków. Uzupełnione przed jakimkolwiek scoringiem TEST. Kaskada D12 bez zmian mimo obserwacji z VAL (patrz D12) |
+| 27.11.2026 | D21 (nowa), D10 | Protokół ewaluacji TEST: metryki per okno, podzbiór, incydent, ranking kolejki alertów (P@K, NDCG@K z zyskiem liniowym), składniki RiskScore (urządzenie podstawowe = najczęstsze w TRAIN), zakres ablacji, dokładne kryteria hipotez | spisane przed pierwszym scoringiem TEST |

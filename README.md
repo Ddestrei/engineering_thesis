@@ -8,7 +8,7 @@ Praca inżynierska: porównanie metod regułowych, statystycznych i uczenia masz
 - [PLAN_NAPRAWCZY.md](PLAN_NAPRAWCZY.md): zadania w kodzie, w kolejności faz.
 - `Ocena_projektu_system_wykrywania_anomalii_SQL_WPF.docx`: ocena zewnętrzna, na którą odpowiadają dwa powyższe pliki.
 
-> **Stan:** trwa realizacja planu naprawczego (Fazy 1–6 zakończone). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth → okna UserId × 30 min z cechami D14. Detektory (Faza 6) uczy się i stroi na VAL osobnym poleceniem; ewaluacja na TEST to Faza 7; docelowy łańcuch opisuje METODOLOGIA.md.
+> **Stan:** trwa realizacja planu naprawczego (Fazy 1–6 zakończone, Faza 7: kod gotowy). Jedno polecenie (`run_experiment`) przeprowadza ziarno przez cały łańcuch: generator → baza (30 loginów, role) → Extended Events → LOGGER → połączenie z ground truth → okna UserId × 30 min z cechami D14. Detektory (Faza 6) uczy się i stroi na VAL, a ewaluację na TEST (Faza 7) robi się z zamrożonych plików osobnymi poleceniami; docelowy łańcuch opisuje METODOLOGIA.md.
 
 ## Struktura repozytorium
 
@@ -22,14 +22,15 @@ anomaly/                  pakiet Pythona
   run_experiment.py       orkiestrator: cały łańcuch dla jednego ziarna
   features/               połączenie logów XE z ground truth (xe_join), okna i cechy D14 (windowing)
   models/                 detektory (reguły, robust, IF, OCSVM, LOF), normalizacja D8, progi D7, strojenie na VAL
-  evaluation/             ewaluacja, ablacja, EDA (Fazy 7 i 9)
+  evaluation/             ablacja, scoring z zamrożonej konfiguracji, metryki, RiskScore, statystyka, raport
 LOGGER/                   program .NET 9: plik .xel (Extended Events) -> JSON (surowe fakty + EventUid)
 sql_files/                sesja Extended Events, role i loginy (sim_roles_and_users.sql, generowany)
 PREZENTACJE/              prezentacje
 archiwum/                 nieaktualne wyniki sprzed planu naprawczego (patrz archiwum/README.md)
 data/seed_<N>/            [generowane, poza gitem] generated/ (ground truth), xe/ (LOGGER), joined/ (połączone),
                           features/ (okna i cechy), run_summary.json (czasy, statystyki, wersja kodu)
-results/seed_<N>/         [generowane, poza gitem] detectors/<konfiguracja>/: zamrożona konfiguracja, modele, score'y VAL
+results/seed_<N>/         [generowane, poza gitem] detectors/<konfiguracja>/ (zamrożona konfiguracja, modele),
+                          evaluation/<split>/ (score'y, metryki, incydenty); results/summary/<split>/ (zbiorczo, RAPORT.md)
 tests/                    testy jednostkowe (python -m pytest)
 ```
 
@@ -89,7 +90,17 @@ Wykonawca uruchomiony samodzielnie (bez `--dry-run`) nie przywraca bazy ani nie 
 python -m anomaly.models.training --seed 11 22 33 44 55
 ```
 
-Wynik: `results/seed_<N>/detectors/full/frozen_config.json` (+ `.sha256`), `models/<wariant>_<detektor>.joblib`, `val_scores_<wariant>.csv`. Polecenie nie czyta plików TEST. **Ewaluacja na TEST** to Faza 7. Poprzedni eksperyment ML i EDA na cechach per zdarzenie są w `archiwum/stary_pipeline/`.
+Wynik: `results/seed_<N>/detectors/full/frozen_config.json` (+ `.sha256`), `models/<wariant>_<detektor>.joblib`, `val_scores_<wariant>.csv`. Polecenie nie czyta plików TEST.
+
+**Ablacja i ewaluacja** (Faza 7, protokół METODOLOGIA D21), w tej kolejności:
+
+```bash
+python -m anomaly.evaluation.ablation --seed 11 22 33 44 55                    # 13 konfiguracji D14, ok. 25 min na ziarno
+python -m anomaly.evaluation.evaluate --split validation --seed 11 22 33 44 55  # kontrola: odtworzenie metryk VAL z Fazy 6
+python -m anomaly.evaluation.evaluate --split test --seed 11 22 33 44 55        # wyniki pracy (wymaga czystego drzewa gita)
+```
+
+Wynik zbiorczy: `results/summary/<split>/` (`RAPORT.md`, `metrics_summary.csv`, `comparisons.csv`, `hypotheses.json`, `performance.csv`, `manifest.json`). Poprzedni eksperyment ML i EDA na cechach per zdarzenie są w `archiwum/stary_pipeline/`.
 
 ## Testy
 

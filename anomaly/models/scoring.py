@@ -64,7 +64,9 @@ class ScoreNormalizer:
 
     def to_dict(self) -> dict:
         return {"n": len(self.reference), "s_max": self.s_max, "sigma": self.sigma,
-                "sigma_level": self.sigma_level, "reference": [round(v, 10) for v in self.reference]}
+                # Pełna precyzja: zaokrąglenie przesuwałoby rank okien leżących na granicy, więc
+                # scoring z pliku (Faza 7) nie odtwarzałby alarmów VAL z Fazy 6.
+                "sigma_level": self.sigma_level, "reference": list(self.reference)}
 
 
 def rank_key(norm: np.ndarray, excess: np.ndarray) -> np.ndarray:
